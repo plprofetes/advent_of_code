@@ -7,18 +7,41 @@
           "label": "build",
           // "command": "docker run --rm -v ${workspaceRoot}/2018/aoc1:/src/main ponylang/ponyc ponyc -V 1 -d ",
           // "command": "docker run --rm -v ${workspaceRoot}:/src/main ponylang/ponyc bash -c 'ls -alh'",
-          "command": "docker run --rm -v ${workspaceRoot}/2018/aoc1:/src/main ponylang/ponyc bash -c 'ponyc -V 1 -d && ./main '",
+          "command": "docker run --rm -v ${fileDirname}:/src/main ponylang/ponyc bash -c 'ponyc -V 1 -d && ./main '",
           "type": "shell",
           "presentation": {
               "echo": true,
               "reveal": "always",
-              "focus": true,
+              "focus": false,
               "panel": "shared"
           },
           "group": {
               "kind": "build",
               "isDefault": true
-          }
+          },
+          "problemMatcher": {
+            "owner": "pony",
+            "fileLocation": ["relative", "${fileDirname}"],
+            "pattern": [
+                {
+                    "regexp": "^(.+):$",
+                    "severity": 1
+                },
+                {
+                    "regexp": "^\\/src\\/main\\/([^:]+):(\\d+):(\\d+):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "code": 4,
+
+                },
+                {
+                    "regexp": "^(\\s.+)$",
+                    "message": 1,
+                    "loop": true
+                }
+            ]
+        }
       },
       {
           "label": "run",
