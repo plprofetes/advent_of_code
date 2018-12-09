@@ -5,9 +5,9 @@
   "tasks": [
       {
           "label": "build",
-          // "command": "docker run --rm -v ${workspaceRoot}/2018/aoc1:/src/main ponylang/ponyc ponyc -V 1 -d ",
-          // "command": "docker run --rm -v ${workspaceRoot}:/src/main ponylang/ponyc bash -c 'ls -alh'",
-          "command": "docker run --rm -v ${fileDirname}:/src/main ponylang/ponyc bash -c 'ponyc -V 1 -d && ./main '",
+        //   "command": "docker run --rm -v ${workspaceRoot}/2018/aoc1:/src/main ponylang/ponyc ponyc -V 1 -d ",
+        //   "command": "docker run --rm -v ${workspaceRoot}:/src/main ponylang/ponyc ponyc -h",
+          "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main '",
           "type": "shell",
           "presentation": {
               "echo": true,
