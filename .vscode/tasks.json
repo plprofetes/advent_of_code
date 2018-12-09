@@ -21,7 +21,7 @@
           },
           "problemMatcher": {
             "owner": "pony",
-            "fileLocation": ["relative", "${fileDirname}"],
+            "fileLocation": ["relative", "${workspaceFolder}"],
             "pattern": [
                 {
                     "regexp": "^(.+):$",
