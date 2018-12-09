@@ -19,8 +19,8 @@ class AOC1
       threes.push(line)
     end
 
-    twos.debug()
-    threes.debug()
+    // twos.debug()
+    // threes.debug()
 
     let prom2 = Promise[U32]
     let prom3 = Promise[U32]
@@ -30,7 +30,7 @@ class AOC1
         (vals : Array[U32 val] val) => 
           Iter[U32](vals.values()).fold[U32](1, {
             (mem, v) => 
-            Debug("v:" + v.string())
+            // Debug("v:" + v.string())
             mem * v 
           })
       })

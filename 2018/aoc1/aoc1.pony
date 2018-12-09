@@ -69,9 +69,9 @@ class AOC2
     for dfreq in Iter[String](str.split("\n").values()).cycle() do
       if history.size() > 1000000 then
         return -999999
-      end
+      end 
       let y : String iso = dfreq.clone()
-      try
+      try 
         if y(0)? == '+' then
           y.delete(0,1)
         end
