@@ -21,23 +21,6 @@ Simplest approach:
 
 */
 
-// TODO put that in my stdlib with some trait defined on actor (HasResults?)
-class iso Reporter is Fulfill[None,None]
-  let wip: AOC1 tag
-  let env: Env
-  
-  new create(env': Env, wip': AOC1 tag ) =>
-    env = env'
-    wip = wip'
-  
-  fun ref apply(_:None) : None => 
-    let p = Promise[U64] 
-    // p.next[None]( {(cnt) => Debug("There are " + cnt.string() +  " shared sq inches") })
-    p.next[None]( {(cnt) => env.out.print("There are " + cnt.string() +  " shared sq inches") })
-    wip.results(p)
-    None
-
-  
 actor Main
   let env : Env
 
@@ -50,21 +33,7 @@ actor Main
 
       let done = Promise[None]
       done.next[None](recover Reporter(env,part1) end, recover RejectAlways[None] end)
-      // [None]( 
-      //   { (_) =>
-      //     let p = Promise[U64] 
-      //     // p.next[None]( {(cnt) => Debug("There are " + cnt.string() +  " shared sq inches") })
-      //     p.next[None]( {(cnt) => Debug("There are " + cnt.string() +  " shared sq inches") })
-      //     part1.results(p)
-      //   }
-      // )
-
       part1.work(input, done) //.next[None]( this~_print() ) // {(x) => env.out.write("Part1: " + x.string() )}
-      // input = LineReader(env.root as AmbientAuth, "in.txt") // there's no rewind, use array in LineReader?
-      // for p in AOC2(input).values() do 
-      //   // Debug.out("#") // 249 unnecessary promises to check...
-      //   p.next[None]( { (x) => env.out.write("Part2: " + x )})
-      // end
 
     else
       Debug.err("Error in processing: file not read")

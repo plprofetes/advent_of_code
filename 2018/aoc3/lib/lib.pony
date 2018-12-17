@@ -88,18 +88,20 @@ class val Patch
     // A's right edge to right of B's left edge, [RectA.Right > RectB.Left], and
     // A's top above B's bottom, [RectA.Top > RectB.Bottom], and
     // A's bottom below B's Top [RectA.Bottom < RectB.Top]
-    if (x <= (other.x + other.w)) and
-      ((x + h) >= other.x) and 
-      (y <= (other.y + other.h)) and
-      ((y + h) >= other.y) then
+    if (x < (other.x + other.w)) and
+      ((x + w) > other.x) and 
+      (y < (other.y + other.h)) and
+      ((y + h) > other.y) then
       let ux =  _max(x, other.x) // upper x coord
       let uy = _max(y, other.y)  // upper y coord
       var p = recover val Patch(ux, uy,
-        _min(x+w, other.x + other.w) - ux, // coords to size
-        _min(y+h,other.y+other.h) - uy
+        _min(x+w, other.x + other.w) - ux, // coords to size. Must not be < 0 => underflow!
+        _min(y+h, other.y + other.h) - uy
       )
       end
-      // Debug.out("box of " + p.string())
+      // if p.area() > 1000 then
+      //   Debug.out("invalid overlap of " + this.string() + " and " + other.string() + ": " + p.string())
+      // end
       p
     else
       None
@@ -116,6 +118,22 @@ class val Patch
         ary
       end
 
+// TODO put that in my stdlib with some trait defined on actor (HasResults?)
+class iso Reporter is Fulfill[None,None]
+  let wip: AOC1 tag
+  let env: Env
+  
+  new create(env': Env, wip': AOC1 tag ) =>
+    env = env'
+    wip = wip'
+  
+  fun ref apply(_:None) : None => 
+    let p = Promise[U64] 
+    // p.next[None]( {(cnt) => Debug("There are " + cnt.string() +  " shared sq inches") })
+    p.next[None]( {(cnt) => env.out.print("There are " + cnt.string() +  " shared sq inches") })
+    wip.results(p)
+    None
+
 actor OverlapFuncActor
   let patch : Patch
   let sink : Sink
@@ -127,12 +145,8 @@ actor OverlapFuncActor
   be accept(other : Patch) =>
     match patch.overlap(other)
     | let x : Patch => 
-      // Debug.err(".")
-      for p in x.points().values() do
-        // Debug("reporting point (" + p._1.string() + "," + p._2.string() + ")")
-        // TODO: too many messages to one actor? send Patches?
-        sink.report(p)
-      end
+      sink.report(x)
+      // DO NOT SPLIT THIS INTO ZILLION OF MESSAGES
     // else
       // Debug("Not matched expr! It must be None!")
     end
@@ -147,8 +161,15 @@ actor Sink
   new create() =>
     sq_inches = Map[U32, Array[Point val] ]
 
-  // report idempotently shared square inch
-  be report(xy: Point val) =>
+  // report idempotently each patch, store points internally do avoid 
+  // counting the same sq inch twice
+  be report(xy: Patch val) =>
+    for p in xy.points().values() do
+        // Debug("reporting point (" + p._1.string() + "," + p._2.string() + ")")
+        _insert(p)
+    end
+  
+  fun ref _insert(xy : Point val) : None =>
     try
       let ary = sq_inches(xy._1)?
       // Debug("Inspecting key " + xy._1.string() + " with " + ary.size().string() + " objects")
