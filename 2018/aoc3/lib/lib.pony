@@ -137,19 +137,27 @@ class iso Reporter is Fulfill[None,None]
 actor OverlapFuncActor
   let patch : Patch
   let sink : Sink
+  let id : String
 
-  new create(patch': Patch, sink':  Sink) =>
+  new create(patch': Patch, sink':  Sink, id': String) =>
     patch = patch'
     sink = sink'
+    id = id'
 
-  be accept(other : Patch) =>
+  be accept(other : Patch, owner : OverlapFuncActor tag) =>
     match patch.overlap(other)
     | let x : Patch => 
       sink.report(x)
+      sink.unregister_claim(id)
+      owner.collide()
       // DO NOT SPLIT THIS INTO ZILLION OF MESSAGES
     // else
       // Debug("Not matched expr! It must be None!")
     end
+
+  be collide() =>
+    sink.unregister_claim(id)
+
   be is_done(p : Promise[None] ) =>
     p(None)
 
@@ -157,10 +165,17 @@ actor OverlapFuncActor
 // TODO rework, array of U32 is sufficient to hold just Ys
 actor Sink
   let sq_inches: Map[U32, Array[Point val]] ref  // naiive approach, indexed by X for faster traversal
+  let uu : Set[String] ref
 
   new create() =>
     sq_inches = Map[U32, Array[Point val] ]
+    uu = Set[String]
 
+  be register_claim(id: String val) =>
+    uu.set(id)
+  be unregister_claim(id: String val) =>
+    uu.unset(id)
+  
   // report idempotently each patch, store points internally do avoid 
   // counting the same sq inch twice
   be report(xy: Patch val) =>
@@ -192,7 +207,13 @@ actor Sink
 
     be points_count(p : Promise[U64]) =>
       var cnt : U64 = Iter[Array[Point val]](sq_inches.values()).fold[U64](0, {(mem, ary) => mem + ary.size().u64()})
+      // Part 1:
       Debug("Countting the results: " + cnt.string())
+      try
+        // TODO propagate this in a promise to make it work in non-debug mode
+        // Part 2:
+        Debug("Claims without collision(" + uu.size().string() + "): " + uu.values().next()? )
+      end
       p(cnt)
     
 actor AOC1
@@ -211,14 +232,17 @@ actor AOC1
     for line in lines.values() do
       try
         (let id, let patch) = Parser(line)?
+
+        sink.register_claim(id)
         // Debug("Processing " + id + " of " + patch.string())
         // notify everybody so far about new patch
         // since relation of overlapping is bidirectional - it will be done only once per each pair
+        let owner = OverlapFuncActor(patch, sink, id)
         for worker in workers.values() do
-          worker.accept(patch)
+          worker.accept(patch, owner)
         end
         // register new worker
-        workers.push(OverlapFuncActor(patch, sink))
+        workers.push(owner)
       else
         Debug("Could not process line: " + line)
       end
@@ -226,7 +250,7 @@ actor AOC1
     Debug.out("Created " + workers.size().string() + " work actors")
     // TODO wait on actors to finish
 
-    // ugly end, how to ask all the actors and pass fulfilled promises only?
+    // ugly end, this is how I wait in actor world
     Promises[None].join(
       Iter[OverlapFuncActor](workers.values())
         .map[Promise[None]](
