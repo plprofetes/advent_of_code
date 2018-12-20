@@ -81,15 +81,25 @@ actor Main
     ).next[None]( {
       (x : Array[Result val] val) => 
         Debug("All done, computing the final results from " + x.size().string() + " actors:")
-        let max_total_slept = Iter[Result](x.values()).fold[Result]( ("fake", 0, 0), {
+        let max_total_slept = Iter[Result](x.values()).fold[Result]( ("fake", 0, 0, 0), {
           (mem, res) => // min lambda, extract to stdlib as MinBy[A: Array[B], f: {a : A} : B^]
             
             Debug(
-          "\tGuard " + res._1 + 
-          " slept the most (" + res._2.string() + " minutes)" + 
-          ", top at " + res._3.string() + ".")
+              "\tGuard " + res._1 + 
+              " slept the most (" + res._2.string() + " minutes)" + 
+              ", top at " + res._3.string() + " or " + res._4.string() + "."
+            )
 
             if res._2 > mem._2 then
+              res
+            else
+              mem
+            end
+        })
+        let most_freq_min = Iter[Result](x.values()).fold[Result]( ("fake", 0, 0, 0), {
+          (mem, res) => // min lambda, extract to stdlib as MinBy[A: Array[B], f: {a : A} : B^]
+            
+            if res._4 > mem._4 then
               res
             else
               mem
@@ -98,11 +108,18 @@ actor Main
         Debug(
           "Guard " + max_total_slept._1 + 
           " slept the most (" + max_total_slept._2.string() + " minutes)" + 
-          ", top at " + max_total_slept._3.string() + ".")
+          ", top at " + max_total_slept._3.string() + "."
+        )
+        Debug(
+          "Guard " + most_freq_min._1 + 
+          " slept the most (" + most_freq_min._2.string() + " minutes)" + 
+          ", top at " + most_freq_min._3.string() + "."
+        )
           // TODO call proper method of Main with result to the quiz
         try
           // TODO: why no autocast to string?
           Debug("Part 1 answer = " + (max_total_slept._1.u32()? * max_total_slept._3.u32()).string())
+          Debug("Part 2 answer = " + (most_freq_min._1.u32()? * most_freq_min._3.u32()).string())
         else
           Debug("Error! Cannot print results!")
         end

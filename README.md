@@ -33,4 +33,5 @@ Thanks https://adventofcode.com/ !
   * allows writing convenient sorters using existing comparators
   * Ruby inspired
 * Missing Seq.min, Seq.max methods, one has to type ```Iter[]...fold[]()``` code over and over
+  * with additional param as value being compared, when different from whole basic type?
 

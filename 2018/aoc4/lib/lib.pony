@@ -155,8 +155,8 @@ primitive Awake
 primitive Asleep
 type State is (Awake | Asleep)
 
-// Guard id, total slept, top minute
-type Result is (String val, U16 val, U16 val)
+// Guard id, total slept, top asleep minute, most freq minute counter
+type Result is (String val, U16 val, U16 val, U16 val)
 
 actor Guard
   let _id : String
@@ -211,7 +211,18 @@ actor Guard
           mem + curr
       }
     )
-    p( (_id, total_minutes, best_minute.u16()) )
+    let most_freq_minute_cnt : U16 = Iter[U16](_asleep.values()).fold[U16](0,
+      {
+        // max
+        (mem, curr) =>
+          if mem < curr then
+            curr
+          else
+            mem
+          end
+      }
+    )
+    p( (_id, total_minutes, best_minute.u16(), most_freq_minute_cnt) )
   
   fun ref _maybe_reset(ts : Timestamp) : None =>
     let offset = ts.y + ts.m.u16() + ts.d.u16()
