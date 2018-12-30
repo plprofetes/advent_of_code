@@ -29,9 +29,31 @@ Thanks https://adventofcode.com/ !
 ## Day 4
 
 * Missing proper Time and Date classes in Stdlib
-* Missing SortBy accepting a labda that transforms elements of array to something Comparable
+* Missing SortBy accepting a lambda that transforms elements of array to something Comparable
   * allows writing convenient sorters using existing comparators
   * Ruby inspired
 * Missing Seq.min, Seq.max methods, one has to type ```Iter[]...fold[]()``` code over and over
   * with additional param as value being compared, when different from whole basic type?
 
+## Day 5
+
+Fun first! Too complex approach to do a linked-list of actors and try to coordinate reactions.
+
+Some kind of transaction must be figured out, such as a token, and reactions need to wait until token is received. First attempt with FSM.
+
+Some kind of notifications must me sent to siblings when transaction is done.
+
+Two Phase Commit may be required here.
+
+### State machine conclusions
+
+* change state first, then message
+* messages sent from try..end blocks cannot be unsent, even if block fails
+* method is single-threaded, but still can by cut off the CPU in the middle of executing!
+  * try_react -> when Idle - always set the state properly before Reacting
+* messages can be deduped if reaction to them is in another behavior: flag can be set multiple times, but cleared once, the rest of reaction code is NOOP
+* in agent's inbox there's a lot of historical messages, some of them may need to be redirected, always check current state
+
+### Not tested, but sounds reasonable
+
+* state should be iso variable, not ref, for more resilient code, harder to break
