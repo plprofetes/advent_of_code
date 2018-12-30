@@ -3,25 +3,26 @@
   // for the documentation about the tasks.json format
   "version": "2.0.0",
   "tasks": [
-      {
-          "label": "build",
-        //   "command": "docker run --rm -v ${workspaceRoot}/2018/aoc1:/src/main ponylang/ponyc ponyc -V 1 -d ",
-        //   "command": "docker run --rm -v ${workspaceRoot}:/src/main ponylang/ponyc ponyc -h",
-          "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main '",
-          "type": "shell",
-          "presentation": {
-              "echo": true,
-              "reveal": "always",
-              "focus": false,
-              "panel": "shared"
-          },
-          "group": {
-              "kind": "build",
-              "isDefault": true
-          },
-          "problemMatcher": {
+    {
+        "label": "build",
+        "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main '",
+        "type": "shell",
+        "presentation": {
+            "echo": true,
+            "reveal": "always",
+            "focus": false,
+            "panel": "shared"
+        },
+        "group": {
+            "kind": "build",
+            "isDefault": true //ctrl+shift+b
+        },
+        "problemMatcher": {
             "owner": "pony",
-            "fileLocation": ["relative", "${workspaceFolder}"],
+            "fileLocation": [
+                "relative",
+                "${workspaceFolder}"
+            ],
             "pattern": [
                 {
                     "regexp": "^(.+):$",
@@ -32,8 +33,7 @@
                     "file": 1,
                     "line": 2,
                     "column": 3,
-                    "code": 4,
-
+                    "code": 4
                 },
                 {
                     "regexp": "^(\\s.+)$",
@@ -42,22 +42,21 @@
                 }
             ]
         }
-      },
-      {
-          "label": "run",
-          // "command": "docker run --rm -v ${workspaceRoot}:/src/main ponylang/ponyc bash -c 'ponyc test -V 1 -d -o test && test/test '",
-          "command": "docker run --rm -v ${workspaceRoot}/2018/aoc1:/src/main ponylang/ponyc ./main",
-          "type": "shell",
-          "presentation": {
-              "echo": true,
-              "reveal": "always",
-              "focus": true,
-              "panel": "shared" 
-          },
-          "group": {
-              "kind": "test",
-              "isDefault": true
-          }
-      }
-  ]
+    },
+    {
+        "label": "run",
+        "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) &&  ./main'",
+        "type": "shell",
+        "presentation": {
+            "echo": true,
+            "reveal": "always",
+            "focus": true,
+            "panel": "shared"
+        },
+        "group": {
+            "kind": "test",
+            "isDefault": true // map as ctrl+alt+b
+        }
+    }
+]
 }
