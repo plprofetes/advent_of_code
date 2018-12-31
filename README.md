@@ -13,6 +13,9 @@ Thanks https://adventofcode.com/ !
 
 * Unlimited ThreadPool-like approach when modelling problems
 * Functional-like approach to extract static functions to primitives
+* one does not need to worry about locks when writing counters
+  * but needs to worry about data being en-route in queues - more caching, more state machines
+  * data/actor races all the time! perfect for pipelines, terrible for grids
 
 ### How to make life easier?
 
@@ -20,6 +23,8 @@ Thanks https://adventofcode.com/ !
 * autocasting up for comparison when comparing Numbers? ie. U8 -> U32, cannot screw that, right?
   * upcasting to USize or ISize would be handy as well
 * C#'s async / await - on async keyword they pack the rest of the body in a promise, that is fulfilled later, magically. In Pony one has to deal with Promises, which is kinda cumbersome
+* WARN if lambda has assignments on variables with the same names as local variables - they would not be changed! it may be misleading.
+* debugger, any, really
 
 ## Day 2
 
@@ -45,14 +50,20 @@ Some kind of notifications must me sent to siblings when transaction is done.
 
 Two Phase Commit may be required here.
 
+A state of whole reaction/no reaction is needed to determine when reactions are done.
+
 ### State machine conclusions
 
 * change state first, then message
 * messages sent from try..end blocks cannot be unsent, even if block fails
-* method is single-threaded, but still can by cut off the CPU in the middle of executing!
+* fun/be is single-threaded, but still can by cut off the CPU in the middle of executing!
   * try_react -> when Idle - always set the state properly before Reacting
 * messages can be deduped if reaction to them is in another behavior: flag can be set multiple times, but cleared once, the rest of reaction code is NOOP
 * in agent's inbox there's a lot of historical messages, some of them may need to be redirected, always check current state
+* make sure all connections are established correctly, actors can be launched in any order, causality must be explicit, since independent actors may process messages in different order and still remain causal.
+  * double linked list creation: before any reaction is performed - make sure hello() is called back. If it's not - delay reaction.
+    * in current solution - missing hello is stored and forces a reaction to try to trigger
+  * since my linked list requires being able to move to the right, and that must be enforced in code. if there's no _next at the moment - wait/cache information until it comes
 
 ### Not tested, but sounds reasonable
 

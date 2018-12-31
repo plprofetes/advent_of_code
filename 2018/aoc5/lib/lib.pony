@@ -88,6 +88,38 @@ primitive Next
 primitive Prev
 type Sibling is (Next | Prev)
 
+// TODO: just one fn at given time, wrap inside promise.
+actor ReactionWatcher
+  var _current_reactions: U64 = 0
+  let _lambda_on_zero: {()} val
+
+  new create(fn: {()} val) =>
+    _lambda_on_zero = fn
+
+  be inc() =>
+    Debug("++(" + _current_reactions.string() + ")")
+    _current_reactions = _current_reactions + 1
+  
+  be dec() =>
+    Debug("--(" + _current_reactions.string() + ")")
+    if _current_reactions == 0 then
+      Debug("!! less then zero!")
+    else
+      _current_reactions = _current_reactions - 1
+      if _current_reactions == 0 then
+        _double_check() // forces actor to consume the rest of the incoming messages
+        // if that's really 0 - next beh will be called immediately
+      end
+    end
+   
+   be _double_check() =>
+    // check again, something could change!
+    if _current_reactions == 0 then
+        _lambda_on_zero()
+    else
+      Debug("fn call saved!")
+    end
+
 // double linked list made of actors that organize themselves?
 // how to implement reduction so agent can disappear?
 // remember to have initiating actor, that's all that we need.
@@ -102,7 +134,7 @@ A__a - when adding - discover next left - pass message until something active is
 ____D - init message gets transferred to the left without effect
 
 When adding letter by letter at most 1 reaction can be triggered.
-No sense in using actors at all, execept training of async double linked list pattern
+No sense in using actors at all, except training of async double linked list pattern
 
 */
 primitive Idle
@@ -112,19 +144,18 @@ type State is (Idle | Reacting | Reduced)
 
 
 // TODO dont start with reaction? push reaction Tokens? And only those agents are allowed to look for pairs?
-// intruduce _next_alive and _prev_alive to reduce message passing?
+// introduce _next_alive and _prev_alive to reduce message passing?
 // react on NEXT after hello() - then nodes are not blocked by default.
 //   try to react with hello as well? do not lock if letters are different?
 // token can be "reaction energy" that gets consumed, triggers another. If original energy is not consumed == end
 // do not increase number of reactions. Can I reduce it somehow?
-// TODO: if no next - play wait() promise
 actor Unit
   let _letter : String val
+  let _watcher : ReactionWatcher
 
   var _state : State = Idle
   var _prev: (Unit tag | None) = None
   var _next: (Unit tag | None) = None
-  var _finish_cb : (None | Promise[None]) = None // buggy, hook for when Unit is "done"
   var _pending_reaction: Bool = false // was there attempt on another reaction?
 
   fun ref debug(str: String = "") =>
@@ -135,52 +166,56 @@ actor Unit
     end
     Debug("> " + _letter + " <(" + state + "): " + str)
 
-  new create(l: String val, prev: (Unit tag | None) = None) =>
+  new create(l: String val, w: ReactionWatcher, prev: (Unit tag | None) = None) =>
     _letter = l
+    _watcher = w
     match prev
     | let pu : Unit => 
         _prev = pu
         pu.hello(this, _letter) // get acquainted
-        // _state = Reacting
-        // pu.try_react(_letter, ff_promise())
-        // handle_pending_reaction()
-
     end
   
   fun ref ff_promise() : Promise[State] =>
     let p = Promise[State]
     p.next[None]( 
       recover this~_disable_me() end , // partial application
-      {() =>
+      {()(_l = _letter) =>
+      /* // Lambda catches vars on create? what is _state? a copy? Cannot set vals from lambda, must use behs!
         _state = Idle
-        Debug("rejected!")
+        _watcher.dec()
+      */
+        Debug("! rejected but buggy " + _l)
       }) // end of list, become idle again
     p
   
   be handle_pending_reaction() =>
     if _pending_reaction then
       //debug("notify others")
-      _pending_reaction = false
-      // try (_prev as Unit).ping_from_right() end
       try
         (_next as Unit).ping_from_left(this)
-      // else 
-        //debug("no next to call!")
-       end
-    // else
-      //debug("No pending reaction")
+      else 
+        debug("no next to call!")
+        // hello will handle that
+      end
+        _pending_reaction = false
     end
-    
   
   be hello(u: Unit tag, letter: String) =>
-    debug("< Nice to meet you, " + letter + "!")
+    // debug("< Nice to meet you, " + letter + "!")
     _next = u
-    if _pending_reaction or Reaction(_letter, letter) then
-      // _state = Reacting
-      // pu.try_react(_letter, ff_promise())
-      // handle_pending_reaction()
-      // debug("could react....")
-      // if _state is Idle then
+
+    match _state
+    | Reacting => _pending_reaction = true
+    | Idle => 
+      // if someone already asked, or potential reaction -
+      if Reaction(_letter, letter) then
+        u.ping_from_left(this)
+      else
+        // if there was some rq earlier
+        handle_pending_reaction()
+      end
+    | Reduced => 
+      debug("Already reduced, but try further left")
       u.ping_from_left(this)
     end
 
@@ -194,31 +229,32 @@ actor Unit
     // but it's not a problem - when there's no next - it will react on addition
     match _state
     | Reacting =>
-      debug("impssible? old message? Try again?") 
+      // debug("impossible? old message? Try again?") 
       // when this reacting is done - react to the left, if still valid. Otherwise proxy it further?
       // called when waiting on callback after try_react
       // _pending_reaction = true // impossible? 
       // ping_from_left() // wait until more messages is consumed.
       _pending_reaction = true
     | Idle =>
-      debug("got ping from the left")
+      // debug("got ping from the left")
       try 
         _state = Reacting // only if message sent
-        (_prev as Unit).try_react(_letter, ff_promise()) 
+        _watcher.inc()
+        (_prev as Unit).try_react(_letter, ff_promise())
+        // dec is done in the callback 
       else
         // no prev
         _state = Idle
+        _watcher.dec()
       end
     | Reduced =>
       //debug("passing ping from the left")
       // just pass? pass with TTL? 
-      // Passing may not be required, since if reacting - it'll ping later. If Idle - not it's reacting.
       // when reduced - next one may be interested, especially if left side just got reduced.
       try (_next as Unit).ping_from_left(src) end // required?
     end
-    
-
-  // called on left reagent. callback on right one
+  
+  // called on left reagent. callback p on right one
   be try_react(l: String, p: Promise[State]) =>
     match _state
     | Reacting => // Please try again later. 
@@ -226,14 +262,15 @@ actor Unit
       _pending_reaction = true // let us ping back when we're done reacting and not reduced.
       // this get accumulated on the left side and then falls to reduced right side. too many!
       p(Reacting) // did not react just yet.       
-    | Idle =>  // cool. can procede
+    | Idle =>  // cool. can precede
       //debug("reacting letters: " + _letter + " and " + l)
       _state = Reacting
+      _watcher.inc()
       if Reaction(_letter, l) then
         Debug("reaction successful of " + _letter + " and " + l)
-        // anihilate me and sender
+        // annihilate me and sender
         _state = Reduced
-        _pending_reaction = false // callback of p will trigger next reaction, since it can only happend to the left.
+        _pending_reaction = false // callback of p will trigger next reaction, since it can only happened to the left.
         p(Reduced)
       else
         _state = Idle        
@@ -241,23 +278,18 @@ actor Unit
       end
       // convert to be? messages can be deduped!
       handle_pending_reaction() // if someone asked - try to answer. deduplicates multiple requests.
+      _watcher.dec()
     | Reduced => // not active
       try // pass it further
         //debug("proxy letter " + l + " to the left")
         (_prev as Unit).try_react(l, p)
       else
-        //debug("reached start?")
-        p.reject()
+        debug("reached start?")
+        // p.reject()
+        p(Idle)
         // special case
       end 
     end
-
-    
- 
-  // hook for waiting until all data is added an processed
-  be wait(p : Promise[None]) =>
-      // _finish_cb = p
-      p(None) // effectively - can be modelled as another message in inbox
 
   // dir: from which direction from this pov the request came. notify the other side!
   // right reagent
@@ -268,7 +300,7 @@ actor Unit
     | Reacting =>
       match s
       | Reduced =>
-        debug("disable me: reduced")
+        // debug("disable me: reduced")
         _state = Reduced
         // try 
           // (_next as Unit).ping_from_left(this) 
@@ -284,13 +316,8 @@ actor Unit
         // that one was busy, wait to be touched with ping.
         _state = Idle
       end
+      _watcher.dec()
       handle_pending_reaction()
-
-      try // only last one. Warning, may occur earlier as false positive due to message processing.
-        (_finish_cb as Promise[None])(None)
-        _finish_cb = None
-        Debug("Polymer got stabilized.")  
-      end // polymer is now stable
     end
 
   be report(res : Result iso) =>
@@ -314,7 +341,7 @@ actor Unit
     | Reacting =>
       //debug("reporting on reacting polymer!")
       result.abort() // try again, once returned
-      return // short circut.
+      return // short circuit.
     end
     
     match _next
