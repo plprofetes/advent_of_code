@@ -242,7 +242,17 @@ actor Unit
     if _pinged_from_left then // some reaction requested, when busy
       _pinged_from_left = false
       if _state is Idle then
-        try (_prev as Unit).try_react(_letter, ff_promise()) end
+        // wrap this in state change!
+        try //just react already!
+          _state = Reacting // only if message sent
+          _watcher.inc()
+          (_prev as Unit).try_react(_letter, ff_promise())
+          // dec is done in the callback 
+        else
+          // no prev - first node
+          _state = Idle
+          _watcher.dec()
+        end
       end
       // if Reduced - ping from the left?
     end
