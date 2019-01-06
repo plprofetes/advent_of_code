@@ -33,7 +33,11 @@ actor Main
     var last = poly
     for letter in d do
       // create new Unit
-      let u = Unit(letter, w, last)
+      let u = if d.has_next() then
+        Unit(letter, w, last)
+      else
+        Unit.end_node(letter, w, last)
+      end
       last = u
     end
 
@@ -57,12 +61,12 @@ actor Main
     // report to Sink that polymer is stable?
     // how to further delay this? Try again?
 
-  be finish_and_report() =>
+  be finish_and_report(cb : Promise[Bool]) =>
 
     let unit = try polymer as Unit else return end
 
     tries = tries + 1
-    if tries > 2000 then
+    if tries > 200 then
       env.err.print("Error, too many attempts!")
       return
     end
@@ -70,14 +74,17 @@ actor Main
     let p = Promise[String]
     // let failed_pcall = recover val this~finish_and_report() end
     p.next[None](
-      {(str) => 
+      {(str : String) => 
+        cb(true)
         env.out.print("Part1: ___" + ", length: " + str.size().string())
         // Debug("Part1: " + str + ", length: " + str.size().string())
-      }//,
-      // {() => 
-      //   // Debug("Part1 rejected. Try again?")
-      //   failed_pcall()
-      // }
+        // 10978
+      },
+      {() => 
+        Debug("Part1 rejected. Try again?")
+        // failed_pcall()
+        cb(false)
+      }
     )
 
     let result_token = recover iso Result(p) end

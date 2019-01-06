@@ -88,20 +88,23 @@ primitive Next
 primitive Prev
 type Sibling is (Next | Prev)
 
-// TODO: just one fn at given time, wrap inside promise.
 actor ReactionWatcher
   var _current_reactions: U64 = 0
-  let _lambda_on_zero: {()} val
+  var _reporting : Bool = false
+  var _report_queued : Bool = false
+  let _debug : Bool = false
 
-  new create(fn: {()} val) =>
+  let _lambda_on_zero: {(Promise[Bool])} val
+
+  new create(fn: {(Promise[Bool])} val) =>
     _lambda_on_zero = fn
 
   be inc() =>
-    Debug("++(" + _current_reactions.string() + ")")
+    if _debug then Debug("++(" + _current_reactions.string() + ")") end
     _current_reactions = _current_reactions + 1
   
   be dec() =>
-    Debug("--(" + _current_reactions.string() + ")")
+    if _debug then Debug("--(" + _current_reactions.string() + ")") end
     if _current_reactions == 0 then
       Debug("!! less then zero!")
     else
@@ -112,13 +115,28 @@ actor ReactionWatcher
       end
     end
    
-   be _double_check() =>
+  be _double_check() =>
     // check again, something could change!
     if _current_reactions == 0 then
-        _lambda_on_zero()
+      if _reporting then
+        _report_queued = true
+      else
+        _reporting = true
+        let p = Promise[Bool]
+        p.next[None](recover this~_stopped_querying() end)
+        _lambda_on_zero(p)
+        _report_queued = false
+      end
     else
       Debug("fn call saved!")
     end
+
+  be _stopped_querying(b : Bool) =>
+    if _report_queued then
+      _double_check()
+    end
+    _reporting = false
+
 
 // double linked list made of actors that organize themselves?
 // how to implement reduction so agent can disappear?
@@ -149,14 +167,16 @@ type State is (Idle | Reacting | Reduced)
 //   try to react with hello as well? do not lock if letters are different?
 // token can be "reaction energy" that gets consumed, triggers another. If original energy is not consumed == end
 // do not increase number of reactions. Can I reduce it somehow?
+primitive LastUnit // last unit
 actor Unit
   let _letter : String val
   let _watcher : ReactionWatcher
 
   var _state : State = Idle
   var _prev: (Unit tag | None) = None
-  var _next: (Unit tag | None) = None
-  var _pending_reaction: Bool = false // was there attempt on another reaction?
+  var _next: (Unit tag | LastUnit | None) = None
+  var _pending_reaction : Bool = false // try_react got called when busy
+  var _pinged_from_left : Bool = false // something got reduced on the left. try react!
 
   fun ref debug(str: String = "") =>
     let state = match _state
@@ -166,15 +186,7 @@ actor Unit
     end
     Debug("> " + _letter + " <(" + state + "): " + str)
 
-  new create(l: String val, w: ReactionWatcher, prev: (Unit tag | None) = None) =>
-    _letter = l
-    _watcher = w
-    match prev
-    | let pu : Unit => 
-        _prev = pu
-        pu.hello(this, _letter) // get acquainted
-    end
-  
+  // a promise to call disable_me() as reaction callback  
   fun ref ff_promise() : Promise[State] =>
     let p = Promise[State]
     p.next[None]( 
@@ -187,75 +199,142 @@ actor Unit
         Debug("! rejected but buggy " + _l)
       }) // end of list, become idle again
     p
-  
-  be handle_pending_reaction() =>
-    if _pending_reaction then
-      //debug("notify others")
-      try
-        (_next as Unit).ping_from_left(this)
-      else 
-        debug("no next to call!")
-        // hello will handle that
-      end
-        _pending_reaction = false
+
+  new create(l: String val, w: ReactionWatcher, prev: (Unit tag | None) = None) =>
+    _letter = l
+    _watcher = w
+    match prev
+    | let pu : Unit => 
+        _prev = pu
+        pu.hello(this, _letter) // get acquainted
+    end
+
+  new end_node(l: String val, w: ReactionWatcher, prev: (Unit tag | None) = None) =>
+    _letter = l
+    _watcher = w
+    _next = LastUnit
+    match prev
+    | let pu : Unit => 
+        _prev = pu
+        pu.hello(this, _letter) // get acquainted
     end
   
+  // let following nodes know that there may be something new to react on, if they tried to the left
+  be handle_pending_reaction() =>
+    if _state is Reacting then
+      debug("messaging while reacting!")
+      return
+    end
+    if _pending_reaction then // try_react was called! notify forward
+      // debug("notify others")
+      match _next
+      | let n : Unit =>
+        _pending_reaction = false
+        n.ping_from_left(this)
+      | None =>
+        debug("no next to call yet!")
+        // do not clear the flag, will be handled after hello is received
+      | LastUnit =>
+        _pending_reaction = false
+        debug("end of the list!")
+      end
+    end
+    if _pinged_from_left then // some reaction requested, when busy
+      _pinged_from_left = false
+      if _state is Idle then
+        try (_prev as Unit).try_react(_letter, ff_promise()) end
+      end
+      // if Reduced - ping from the left?
+    end
+
+  // _next actor says hello to his _prev one.  
+  // TODO delayed hello stops polymerization
+  // first be called on an actor may not be this one,
+  // so when finally is - apply the changes that were computed when reacting
+  // don't delay the reaction if possible
   be hello(u: Unit tag, letter: String) =>
-    // debug("< Nice to meet you, " + letter + "!")
+    debug("< Nice to meet you, " + letter + "!")
     _next = u
 
     match _state
-    | Reacting => _pending_reaction = true
+    | Reacting => 
+      // do not test for reaction, let the other side do that
+      _pending_reaction = true
     | Idle => 
       // if someone already asked, or potential reaction -
       if Reaction(_letter, letter) then
-        u.ping_from_left(this)
+        u.ping_from_left(this) // react with me, plz!
+       _pending_reaction = false
       else
         // if there was some rq earlier
         handle_pending_reaction()
       end
     | Reduced => 
-      debug("Already reduced, but try further left")
-      u.ping_from_left(this)
+      debug("Already reduced, do try further left")
+      // hello delivered after this one reacted. 
+      // so there may be a node to react further, if not notified by u, earlier
+      // u.ping_from_left(this)  
+      // _pending_reaction = false
+      handle_pending_reaction()
     end
 
-  be ping_again() =>
-    try (_next as Unit).ping_from_left(this) end
-
-  // prone to interleaving messages (try_react vs ping_from_left)?
-  // add TTL, useful with 1
   be ping_from_left(src: Unit) =>
+    // WARNING: quite possible it gets called before hello(). Behave accordingly!
     // The only problem is that _next may not be known yet?
     // but it's not a problem - when there's no next - it will react on addition
     match _state
     | Reacting =>
       // debug("impossible? old message? Try again?") 
       // when this reacting is done - react to the left, if still valid. Otherwise proxy it further?
+      // may be called when there are cCcCcC combinations, 
       // called when waiting on callback after try_react
-      // _pending_reaction = true // impossible? 
-      // ping_from_left() // wait until more messages is consumed.
-      _pending_reaction = true
+      _pinged_from_left = true
     | Idle =>
       // debug("got ping from the left")
-      try 
+      match _next
+      | None => 
+        debug("React before there's _next. React.") 
+        // handle this on callback, can safely react now
+      | LastUnit =>
+        debug("idle end node pinged from the left")
+        // let's react, since someone is asking
+      else
+        None
+      end
+      try //just react already!
         _state = Reacting // only if message sent
         _watcher.inc()
         (_prev as Unit).try_react(_letter, ff_promise())
         // dec is done in the callback 
       else
-        // no prev
+        // no prev - first node
         _state = Idle
         _watcher.dec()
       end
     | Reduced =>
-      //debug("passing ping from the left")
+      // debug("passing ping from the left")
       // just pass? pass with TTL? 
       // when reduced - next one may be interested, especially if left side just got reduced.
-      try (_next as Unit).ping_from_left(src) end // required?
+      // async stuff, _next may not be present yet
+      match _next
+      | let n : Unit =>
+        n.ping_from_left(src) // optimistic scenario
+      | LastUnit =>
+        debug("no node to pass further")
+        None  // no one to pass further
+      | None =>
+        debug("No next yet!!")
+        _pending_reaction = true  // ping when hello is fulfilled
+      end
     end
+    // handle_pending_reaction() // too many tries? reduce this one?
   
   // called on left reagent. callback p on right one
+  // is it guaranteed, that there's full patch to the nexts?
   be try_react(l: String, p: Promise[State]) =>
+    if _next is None then
+      debug("Try_react, but no next?")
+    end
     match _state
     | Reacting => // Please try again later. 
       //debug("try react by: " + l + ", but already reacting.")
@@ -267,13 +346,13 @@ actor Unit
       _state = Reacting
       _watcher.inc()
       if Reaction(_letter, l) then
-        Debug("reaction successful of " + _letter + " and " + l)
+        // debug("reaction successful of " + _letter + " and " + l)
         // annihilate me and sender
         _state = Reduced
-        _pending_reaction = false // callback of p will trigger next reaction, since it can only happened to the left.
+        _pending_reaction = false // callback of p will trigger next reaction, since it can only happened from right to the left.
         p(Reduced)
       else
-        _state = Idle        
+        _state = Idle
         p(Idle)
       end
       // convert to be? messages can be deduped!
@@ -281,35 +360,42 @@ actor Unit
       _watcher.dec()
     | Reduced => // not active
       try // pass it further
-        //debug("proxy letter " + l + " to the left")
+        if _next is None then
+          debug("RED ALERT!")
+        end
+        // Attention, may pass obsolete try_react if in the meantime src node got reduced.
+        // debug("proxy letter " + l + " to the left, looking for reaction")
         (_prev as Unit).try_react(l, p)
       else
-        debug("reached start?")
+        // special case
+        debug("reached start? tried to react with " + l)
         // p.reject()
         p(Idle)
-        // special case
       end 
     end
 
-  // dir: from which direction from this pov the request came. notify the other side!
-  // right reagent
+  // callback for right reagent
+  // @param s [State] resolution of the reaction
   be _disable_me(s : State) => // callback
+    if _next is None then
+      debug("disable_me, but no next?")
+      _pending_reaction = true
+    end
     match _state
-    | Idle => debug("WTF? not reacting")
-    | Reduced => debug("double free!")
+    | Idle => 
+      debug("WTF? not reacting")
+    | Reduced => 
+      debug("double free!")
     | Reacting =>
       match s
       | Reduced =>
         // debug("disable me: reduced")
         _state = Reduced
-        // try 
-          // (_next as Unit).ping_from_left(this) 
-        // else
-          _pending_reaction = true
+        _pending_reaction = true
         // end // go go go! new potential reaction after this one.
       | Idle =>
         //debug("disable me: idle")
-        // meh, nothing changed
+        // meh, nothing changed. maybe react if someone pinged from the left
         _state = Idle
       | Reacting =>
         //debug("disable me: reacting")
@@ -331,6 +417,7 @@ actor Unit
       // report(consume result)
       // return // infinite loop - something was not reacted fully!
       // save report and send it again? can polymer on the right change again? YES!
+      debug("I'm still reacting!!")
       result.abort() // try again
       return
     end
@@ -347,6 +434,9 @@ actor Unit
     match _next
     | let x : Unit =>
       x.report(consume result)
-    | None =>
+    | let x : LastUnit =>
       result.commit()
+    | None =>
+      debug("reporting, but no next received at all! Abort reporting.")
+      result.abort()
     end

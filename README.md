@@ -25,6 +25,7 @@ Thanks https://adventofcode.com/ !
 * C#'s async / await - on async keyword they pack the rest of the body in a promise, that is fulfilled later, magically. In Pony one has to deal with Promises, which is kinda cumbersome
 * WARN if lambda has assignments on variables with the same names as local variables - they would not be changed! it may be misleading.
 * debugger, any, really
+* can constructor call another constructor?
 
 ## Day 2
 
