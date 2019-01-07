@@ -45,27 +45,39 @@ Thanks https://adventofcode.com/ !
 
 Fun first! Too complex approach to do a linked-list of actors and try to coordinate reactions.
 
-Some kind of transaction must be figured out, such as a token, and reactions need to wait until token is received. First attempt with FSM.
+Highly parallel - with peak of a few thousands concurrent reactions!
 
-Some kind of notifications must me sent to siblings when transaction is done.
+~~Some kind of transaction must be figured out, such as a token, and reactions need to wait until token is received~~. First attempt with FSM.
 
-Two Phase Commit may be required here.
+Some kind of notifications must me sent to siblings when transaction is done. Each type of notification must be stored separately, eg.
+* _pending_reaction
+* _pinged_from_left
 
-A state of whole reaction/no reaction is needed to determine when reactions are done.
+~~Two Phase Commit may be required here.~~
+
+### Reporting
+
+A state of whole reaction/no reaction is needed to determine when reactions are done. Implemented with ReactionWatcher. When number of active reactions drops to 0 it calls a lambda that checks if polymer is stable. If polymer is not stable - check is repeated again, when number of reactions drops to 0 again. Usually a few attempts are needed until polymer is stable. It's because message passing takes time and not all reactions are active at once. Similarly, reporting by traversing node-by-node also takes time.
+
+I find this solution more elegant that firing Timer with check(), check(), check()... especially because it's hard to tell how long such reporting would take and having more than one pass at any given time is suboptimal.
 
 ### State machine conclusions
 
-* change state first, then message
+* ~~change state first, then message~~
 * messages sent from try..end blocks cannot be unsent, even if block fails
-* fun/be is single-threaded, but still can by cut off the CPU in the middle of executing!
-  * try_react -> when Idle - always set the state properly before Reacting
+* fun/be is single-threaded, ~~but still can by cut off the CPU in the middle of executing!~~, not preemptive (https://tutorial.ponylang.io/gotchas/scheduling.html) 
 * messages can be deduped if reaction to them is in another behavior: flag can be set multiple times, but cleared once, the rest of reaction code is NOOP
-* in agent's inbox there's a lot of historical messages, some of them may need to be redirected, always check current state
-* make sure all connections are established correctly, actors can be launched in any order, causality must be explicit, since independent actors may process messages in different order and still remain causal.
-  * double linked list creation: before any reaction is performed - make sure hello() is called back. If it's not - delay reaction.
-    * in current solution - missing hello is stored and forces a reaction to try to trigger
-  * since my linked list requires being able to move to the right, and that must be enforced in code. if there's no _next at the moment - wait/cache information until it comes
+* in agent's inbox there's a lot of historical messages, some of them may need to be redirected, some removed. Always check current state and process messages accordingly.
+* make sure all connections are established correctly, actors can be launched in any order, causality might not be enough, since independent actors may scheduled at different order/time and still remain causal.
+  * double linked list creation: before a node is called with hello, it may be called with ping_from_left (!?)
+    * in current solution - delayed hello() call notifies siblings even if reaction was performed before that hello() call.
+    * this is because Main is not producing Units in one transaction. Main continues to spawn actors, and  messages are already flowing. And until all actors in a list are created - there's at least one missing next - the one that is not spawned yet.
+    * is this because actors may not finish their constructor when called, but actor creation is delayed? (no? https://tutorial.ponylang.io/gotchas/scheduling.html)
+  * since my linked list requires being able to move to the right via _next, and that must be enforced in code. if there's no _next at the moment - wait/cache information until it comes
+  * Unit may call try_react to the left without waiting for the next
+    * effects may be sent as ping_from_left until no valid _next is present.
 
 ### Not tested, but sounds reasonable
 
-* state should be iso variable, not ref, for more resilient code, harder to break
+* ~~state should be iso variable, not ref, for more resilient code, harder to break~~
+* create a matrix of behaviors that call different behaviors and check that program behaves correctly when order of messages is not-optimistic

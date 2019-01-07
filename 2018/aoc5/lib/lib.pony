@@ -291,7 +291,7 @@ actor Unit
   be ping_from_left(src: Unit) =>
     // WARNING: quite possible it gets called before hello(). Behave accordingly!
     // The only problem is that _next may not be known yet?
-    // but it's not a problem - when there's no next - it will react on addition
+    // but it's not a problem - when there's no next - it will react with left part of polymer
     match _state
     | Reacting =>
       // debug("impossible? old message? Try again?") 
