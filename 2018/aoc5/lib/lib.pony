@@ -18,6 +18,25 @@ primitive LineReader
       Debug("Could not initialize reader for file " + path')
     end
     rb
+primitive LineReaderWithFilter
+  fun apply(auth: AmbientAuth, path': String, filter: String) : Reader iso^ => 
+    
+    let rb = Reader
+    try
+      let path = FilePath(auth, path')?
+      let f = OpenFile(path) as File
+
+      let l1 = recover val String.from_utf32(filter(0)?.u32()) end
+      let l2 = recover val String.from_utf32(filter(0)?.u32() - 32) end
+      let reduced = recover val f.read_string(f.size()).>remove(l1).>remove(l2) end
+      Debug("reading for " + filter + ". Reduced from " + f.size().string() + " to " + reduced.size().string() + " by removing " + l1 + " and " + l2)
+      
+      rb.append(reduced)
+    else
+      // logger. error
+      Debug("Could not initialize reader for file " + path')
+    end
+    rb
 
 class ref Decoder is Iterator[String]
   var _has_next : Bool = true
@@ -83,6 +102,16 @@ primitive Reaction
     else
       false
     end
+primitive Skip
+  fun apply(filter : String, tested : String) : Bool =>
+    try
+      let l1 = filter(0)?
+      let l2 = l1 + 32
+      let t1 = tested(0)?
+      (t1 == l1) or (t1 == l2)
+    else
+      false
+    end
 
 primitive Next
 primitive Prev
@@ -128,7 +157,7 @@ actor ReactionWatcher
         _report_queued = false
       end
     else
-      Debug("fn call saved!")
+      if _debug then Debug("fn call saved!") end
     end
 
   be _stopped_querying(b : Bool) =>
@@ -152,7 +181,6 @@ A__a - when adding - discover next left - pass message until something active is
 ____D - init message gets transferred to the left without effect
 
 When adding letter by letter at most 1 reaction can be triggered.
-No sense in using actors at all, except training of async double linked list pattern
 
 */
 primitive Idle
@@ -184,7 +212,8 @@ actor Unit
     | Reacting => "Rea"
     | Reduced => "Red"
     end
-    Debug("> " + _letter + " <(" + state + "): " + str)
+    // Debug("> " + _letter + " <(" + state + "): " + str)
+    
 
   // a promise to call disable_me() as reaction callback  
   fun ref ff_promise() : Promise[State] =>
@@ -222,7 +251,7 @@ actor Unit
   // let following nodes know that there may be something new to react on, if they tried to the left
   be handle_pending_reaction() =>
     if _state is Reacting then
-      debug("messaging while reacting!")
+      // debug("messaging while reacting!")
       return
     end
     if _pending_reaction then // try_react was called! notify forward
@@ -450,3 +479,68 @@ actor Unit
       debug("reporting, but no next received at all! Abort reporting.")
       result.abort()
     end
+
+
+
+
+ // as Main, but standalone
+ actor LetterFilter
+  let env : Env
+  var tries : U32 = 0
+  var polymer: (Unit | None) = None  // start of the polymer
+  let _letter : String val
+  
+  new create(env': Env, filter: String val, length_promise : Promise[U32]) =>
+    env = env'
+    _letter = filter
+
+    let reader = try
+      //  LineReaderWithFilter(env.root as AmbientAuth, "in.1.txt", filter )
+       LineReaderWithFilter(env.root as AmbientAuth, "in.txt", filter )
+    else
+      Debug("Cannot read from input file. Exitting!")
+      return
+    end
+
+    let d = Decoder(consume reader)
+    let w = ReactionWatcher(recover val this~_finish_and_report2(filter, length_promise) end)
+
+    let poly = Unit(d.next(), w)
+    polymer = poly
+    var last = poly
+    for letter in d do
+      // create new Unit
+      let u = if d.has_next() then
+        Unit(letter, w, last)
+      else
+        Unit.end_node(letter, w, last)
+      end
+      last = u
+    end
+
+  be _finish_and_report2(letter: String, length_promise: Promise[U32], cb : Promise[Bool]) =>
+
+    let unit = try polymer as Unit else return end
+
+    tries = tries + 1
+    if tries > 200 then
+      env.err.print("Error, too many attempts!")
+      return
+    end
+
+    let p = Promise[String]
+    p.next[None](
+      {(str : String val) => 
+        cb(true)
+
+        length_promise(str.size().u32())
+        env.out.print("Partial result for " + letter + ", length: " + str.size().string())
+      },
+      {() => 
+        // Debug("Part2 rejected. Try again?")
+        cb(false) // notify Watcher to try again
+      }
+    )
+
+    let result_token = recover iso Result(p) end
+    unit.report(consume result_token)

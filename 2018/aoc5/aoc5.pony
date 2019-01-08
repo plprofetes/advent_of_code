@@ -9,12 +9,14 @@ actor Main
   let env : Env
   var tries : U32 = 0
   var polymer: (Unit | None) = None  // start of the polymer
-
   new create(env': Env) =>
     env = env'
-    work()
+    
+    part1()
+    part2()
+    
 
-  be work() =>
+  be part1() =>
     let reader = try
       //  LineReader(env.root as AmbientAuth, "in.1.txt" )
        LineReader(env.root as AmbientAuth, "in.txt" )
@@ -23,9 +25,6 @@ actor Main
       return
     end
     let d = Decoder(consume reader)
-    // let w = ReactionWatcher({() => Debug("Zero!") } )
-
-    // TODO refactor it so only one report is running at given time.
     let w = ReactionWatcher(recover val this~finish_and_report() end)
 
     let poly = Unit(d.next(), w)
@@ -41,28 +40,29 @@ actor Main
       last = u
     end
 
-    // let p = Promise[None]
-    // let call = recover val this~finish_and_report() end
-    // p.next[None]({(_) => 
-    //   Debug("collecting results...")
-    //   call() 
-    // })
-    // last.wait(p)    
+  be part2() =>
+    let jobs = recover ref Array[Promise[U32]] end
 
-    // finish_and_report()
+    for l in Range[U8]('a', 'z' + 1) do
+      let str = recover val String.from_utf32(l.u32()) end
+      let p = Promise[U32]
+      jobs.push(p)
+      _part2(str, p)  // do not monopolize the CPU. Or does it?
+    end
+    let pall = Promises[U32].join(jobs.values())
+    pall.next[None]( {
+      // collect the partial results, pick minimum
+      (ary : Array[U32] val) =>
+        let min = Iter[U32](ary.values()).fold[U32](10000000, {(count, mem) => if count < mem then count else mem end })
+        env.out.print("Part 2: " + min.string() )
+    })
 
-    // polymer.react()
+  be _part2(str : String, p : Promise[U32]) =>
+    Debug("starting to process filtered run with: " + str)
+    LetterFilter(env, str, p)
 
-    // optimal non-actor approach:  walk the buffer and make a step back on reaction
-
-    // push some token through polymer to do reactions?
-    // Priority queue on sending messages about changes in topology?
-    // only the end of a polymer can fluctuate?
-    // report to Sink that polymer is stable?
-    // how to further delay this? Try again?
-
+  // for part1
   be finish_and_report(cb : Promise[Bool]) =>
-
     let unit = try polymer as Unit else return end
 
     tries = tries + 1
@@ -72,23 +72,19 @@ actor Main
     end
 
     let p = Promise[String]
-    // let failed_pcall = recover val this~finish_and_report() end
     p.next[None](
-      {(str : String) => 
+      {(str : String val) => 
         cb(true)
         env.out.print("Part1: ___" + ", length: " + str.size().string())
-        // Debug("Part1: " + str + ", length: " + str.size().string())
         // 10978
       },
       {() => 
-        Debug("Part1 rejected. Try again?")
-        // failed_pcall()
-        cb(false)
+        // Debug("Part1 rejected. Try again?")
+        cb(false) // notify Watcher to try again
       }
     )
 
     let result_token = recover iso Result(p) end
-    // stuff keeps reacting
     unit.report(consume result_token)
-    // if found reacted stuff - backtrack? 
-    // save results? on success - play back to retry if state is reduced?
+
+  

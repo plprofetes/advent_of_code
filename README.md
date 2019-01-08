@@ -81,3 +81,10 @@ I find this solution more elegant that firing Timer with check(), check(), check
 
 * ~~state should be iso variable, not ref, for more resilient code, harder to break~~
 * create a matrix of behaviors that call different behaviors and check that program behaves correctly when order of messages is not-optimistic
+
+### Other conclusions
+
+* When implementing a list - always use additional elements to mark beginning and end. This simplifies creation of such collection, allows all elements to be removed and always compute size.
+  * enclose raw agent in some class/type for easier portability
+* keep Main as simple as possible
+* SortBy, Min, Max primitives are definitely needed.
