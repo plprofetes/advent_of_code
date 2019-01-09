@@ -6,6 +6,8 @@ use "collections"
 use "promises"
 use "buffered"
 
+use @puts[I32](str: Pointer[U8] tag)
+
 primitive LineReader
   fun apply(auth: AmbientAuth, path': String) : Reader iso^ =>
     let rb = Reader
@@ -37,6 +39,8 @@ primitive LineReaderWithFilter
       Debug("Could not initialize reader for file " + path')
     end
     rb
+  fun _final() =>
+    @puts("GCing LineReaderWithFilter".cstring())
 
 class ref Decoder is Iterator[String]
   var _has_next : Bool = true
@@ -57,6 +61,8 @@ class ref Decoder is Iterator[String]
     end
     _has_next = _r.size() > 0
     str
+  fun _final() =>
+    @puts("GCing Decoder".cstring())
 
 class iso Result
   let _p : Promise[String]
@@ -76,18 +82,10 @@ class iso Result
   
   fun ref abort() => // aka reject
     _p.reject()
+  // fun _final() =>
+  //   @puts("GCing Result".cstring())
 
-class iso StdOutReporter is Fulfill[String,None]
-  let env: Env
-  let prefix : String
 
-  new create(env': Env, prefix': String) =>
-    env = env'
-    prefix = prefix'
-
-  fun ref apply(res : String val) : None => 
-    env.out.print(prefix + " " + res)
-    None
 
 primitive Reaction
   fun apply(left : String, right : String) : Bool =>
@@ -165,7 +163,8 @@ actor ReactionWatcher
       _double_check()
     end
     _reporting = false
-
+  fun _final() =>
+    @puts("GCing ReactionWatcher".cstring())
 
 // double linked list made of actors that organize themselves?
 // how to implement reduction so agent can disappear?
@@ -180,7 +179,8 @@ A__a - when adding - discover next left - pass message until something active is
         Try reaction in the same action
 ____D - init message gets transferred to the left without effect
 
-When adding letter by letter at most 1 reaction can be triggered.
+When adding letter by letter at most 1 reaction can be triggered. 
+But other reaction may be happening, because Units are waiting for their turn
 
 */
 primitive Idle
@@ -188,7 +188,7 @@ primitive Reacting
 primitive Reduced
 type State is (Idle | Reacting | Reduced)
 
-
+// Notes
 // TODO dont start with reaction? push reaction Tokens? And only those agents are allowed to look for pairs?
 // introduce _next_alive and _prev_alive to reduce message passing?
 // react on NEXT after hello() - then nodes are not blocked by default.
@@ -213,7 +213,8 @@ actor Unit
     | Reduced => "Red"
     end
     // Debug("> " + _letter + " <(" + state + "): " + str)
-    
+  // fun _final() =>
+  //   @puts("GCing Unit".cstring())
 
   // a promise to call disable_me() as reaction callback  
   fun ref ff_promise() : Promise[State] =>
@@ -230,6 +231,7 @@ actor Unit
     p
 
   new create(l: String val, w: ReactionWatcher, prev: (Unit tag | None) = None) =>
+    // @puts("Creating a Unit".cstring())
     _letter = l
     _watcher = w
     match prev
@@ -480,9 +482,6 @@ actor Unit
       result.abort()
     end
 
-
-
-
  // as Main, but standalone
  actor LetterFilter
   let env : Env
@@ -547,13 +546,16 @@ actor Unit
     let result_token = recover iso Result(p) end
     unit.report(consume result_token)
 
+  fun _final() =>
+    @puts("GCing LetterFilter".cstring())
+
 // run a few, ie. 1 job, but not all. Queue the rest
 actor Part2Runner
   let _env : Env
   let _jobs : Array[Promise[U32]]
   let _queue : Array[String val]
   let _sim_jobs : U8 = 0  // number of jobs run concurrently
-  
+
   new create(env' : Env) =>
     _env = env'
     _jobs = recover ref Array[Promise[U32]] end
