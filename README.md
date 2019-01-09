@@ -88,3 +88,4 @@ I find this solution more elegant that firing Timer with check(), check(), check
   * enclose raw agent in some class/type for easier portability
 * keep Main as simple as possible
 * SortBy, Min, Max primitives are definitely needed.
+* Actor waiting for actor waiting for actor (...) is just too much to pass promises to the very bottom. Use regular classes or find another way to go (Part2Runner)

@@ -489,10 +489,12 @@ actor Unit
   var tries : U32 = 0
   var polymer: (Unit | None) = None  // start of the polymer
   let _letter : String val
+  let _done_cb : Promise[None]  // call this when done, so another letter can be tested
   
-  new create(env': Env, filter: String val, length_promise : Promise[U32]) =>
+  new create(env': Env, filter: String val, length_promise : Promise[U32], done_cb: Promise[None]) =>
     env = env'
     _letter = filter
+    _done_cb = done_cb
 
     let reader = try
       //  LineReaderWithFilter(env.root as AmbientAuth, "in.1.txt", filter )
@@ -532,7 +534,7 @@ actor Unit
     p.next[None](
       {(str : String val) => 
         cb(true)
-
+        _done_cb(None)
         length_promise(str.size().u32())
         env.out.print("Partial result for " + letter + ", length: " + str.size().string())
       },
@@ -544,3 +546,45 @@ actor Unit
 
     let result_token = recover iso Result(p) end
     unit.report(consume result_token)
+
+// run a few, ie. 1 job, but not all. Queue the rest
+actor Part2Runner
+  let _env : Env
+  let _jobs : Array[Promise[U32]]
+  let _queue : Array[String val]
+  let _sim_jobs : U8 = 0  // number of jobs run concurrently
+  
+  new create(env' : Env) =>
+    _env = env'
+    _jobs = recover ref Array[Promise[U32]] end
+    _queue = Iter[U8](Range[U8]('a', 'z' + 1)).map[String val](
+      {(u8) =>
+        recover val String.from_utf32(u8.u32()) end
+      }
+    ).collect(Array[String val](30))
+
+    try_go()
+  
+  be try_go(n : None = None) =>
+    let job = Promise[None]
+    job.next[None](recover this~try_go() end)
+    go(job) // just one
+
+  be go(job: Promise[None]) =>
+    if _queue.size() == 0 then
+      // report!
+      let pall = Promises[U32].join(_jobs.values())
+      pall.next[None]( {
+        // collect the partial results, pick minimum
+        (ary : Array[U32] val) =>
+          let min = Iter[U32](ary.values()).fold[U32](100000, {(count, mem) => if count < mem then count else mem end })
+          _env.out.print("Part 2: " + min.string() )
+      })
+    else
+      // schedule another one
+      let str = try _queue.pop()? else return end
+      let p = Promise[U32]
+      _jobs.push(p)
+      Debug("starting to process filtered run with: " + str)
+      LetterFilter(_env, str, p, job)
+    end
