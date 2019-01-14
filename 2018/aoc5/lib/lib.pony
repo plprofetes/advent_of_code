@@ -5,8 +5,26 @@ use "debug"
 use "collections"
 use "promises"
 use "buffered"
+use "logger"
+use "time"
 
 use @puts[I32](str: Pointer[U8] tag)
+use @sleep[U32](seconds: U32)
+
+actor Noop
+  """
+  No operation actor, to see if it get GCed.
+  """
+  let _s : String
+  let _e : Env
+
+  new create(s: String, e: Env) =>
+    _s = s
+    _e = e
+  be ssize() =>
+    _e.out.print(_s + " is size of " + _s.size().string())
+  // fun _final() =>
+    // @puts("GCing Noop".cstring())
 
 primitive LineReader
   fun apply(auth: AmbientAuth, path': String) : Reader iso^ =>
@@ -67,6 +85,7 @@ class ref Decoder is Iterator[String]
 class iso Result
   let _p : Promise[String]
   var _s : String iso
+  var _c : U32 = 0
 
   new create(p: Promise[String]) =>
     _p = p
@@ -81,11 +100,37 @@ class iso Result
     _p(_s.clone())
   
   fun ref abort() => // aka reject
+    Debug("Report rejected, but collected " + _s.size().string() + " letters so far, did " + _c.string() + " hops." )
     _p.reject()
+  fun ref tap() => // count the hop
+    _c = _c + 1
   // fun _final() =>
   //   @puts("GCing Result".cstring())
 
+class GetResults is TimerNotify
+  """
+    Timer based approach to wait until Report is processed fully and successfully
+  """
+  let _cb : {(U32 val)} val  // callback to behavior that stops this timer externally.
+  let _poly : Unit
 
+  new iso create(polymer : Unit tag, cb : {(U32 val)} val ) =>
+    _cb = cb
+    _poly = polymer
+  
+  fun ref apply(timer: Timer, count: U64): Bool =>
+    let p = Promise[String] // callback for result, ugly, should've passed Env here
+    p.next[None](
+      {(str : String val) => 
+        _cb(str.size().u32())
+        Debug("Done! Part2: " + ", length: " + str.size().string())
+      }
+    )
+
+  let result_token = recover iso Result(p) end
+  _poly.report(consume result_token)
+
+  true // cancel this externally, via _cb. Since Result will finish asynchronously, it's not known now what to return.
 
 primitive Reaction
   fun apply(left : String, right : String) : Bool =>
@@ -100,20 +145,6 @@ primitive Reaction
     else
       false
     end
-primitive Skip
-  fun apply(filter : String, tested : String) : Bool =>
-    try
-      let l1 = filter(0)?
-      let l2 = l1 + 32
-      let t1 = tested(0)?
-      (t1 == l1) or (t1 == l2)
-    else
-      false
-    end
-
-primitive Next
-primitive Prev
-type Sibling is (Next | Prev)
 
 actor ReactionWatcher
   var _current_reactions: U64 = 0
@@ -219,15 +250,7 @@ actor Unit
   // a promise to call disable_me() as reaction callback  
   fun ref ff_promise() : Promise[State] =>
     let p = Promise[State]
-    p.next[None]( 
-      recover this~_disable_me() end , // partial application
-      {()(_l = _letter) =>
-      /* // Lambda catches vars on create? what is _state? a copy? Cannot set vals from lambda, must use behs!
-        _state = Idle
-        _watcher.dec()
-      */
-        Debug("! rejected but buggy " + _l)
-      }) // end of list, become idle again
+    p.next[None](recover this~_disable_me() end) // partial application
     p
 
   new create(l: String val, w: ReactionWatcher, prev: (Unit tag | None) = None) =>
@@ -250,7 +273,7 @@ actor Unit
         pu.hello(this, _letter) // get acquainted
     end
   
-  // let following nodes know that there may be something new to react on, if they tried to the left
+  // Node was reacting when message came. Resolve it here
   be handle_pending_reaction() =>
     if _state is Reacting then
       // debug("messaging while reacting!")
@@ -452,6 +475,7 @@ actor Unit
       fulfill or pass to the next
     """
     let result = consume res
+    result.tap() // bump the counter.
     
     if (_state is Reacting) or _pending_reaction then
       // //debug("reporting on reacting polymer!")
@@ -489,22 +513,27 @@ actor Unit
   var polymer: (Unit | None) = None  // start of the polymer
   let _letter : String val
   let _done_cb : Promise[None]  // call this when done, so another letter can be tested
-  
+  let _length_promise : Promise[U32]  // call this when done, so another letter can be tested
+  let timers : Timers = Timers
+  var timer_tag : ( Timer tag | None ) = None // timer that spawns Result until it's successful
+
   new create(env': Env, filter: String val, length_promise : Promise[U32], done_cb: Promise[None]) =>
     env = env'
     _letter = filter
     _done_cb = done_cb
+    _length_promise = length_promise
 
     let reader = try
-      //  LineReaderWithFilter(env.root as AmbientAuth, "in.1.txt", filter )
        LineReaderWithFilter(env.root as AmbientAuth, "in.txt", filter )
+      //  LineReaderWithFilter(env.root as AmbientAuth, "in.2.txt", filter ) // just 450 letters
     else
       Debug("Cannot read from input file. Exitting!")
       return
     end
 
     let d = Decoder(consume reader)
-    let w = ReactionWatcher(recover val this~_finish_and_report2(filter, length_promise) end)
+    // let w = ReactionWatcher(recover val this~_finish_and_report2(filter, length_promise) end)
+    let w = ReactionWatcher({(cb : Promise[Bool]) =>  cb(false) })  // just disable, can be removed entirely, since reporting is done by Timer
 
     let poly = Unit(d.next(), w)
     polymer = poly
@@ -518,36 +547,54 @@ actor Unit
       end
       last = u
     end
+    
+    // check every 5 secs if polymer got stable
+    let timer = Timer(GetResults(poly, recover this~_finish() end ), 3_000_000_000, 5_000_000_000)
+    timer_tag = timer
+    timers(consume timer)
 
-  be _finish_and_report2(letter: String, length_promise: Promise[U32], cb : Promise[Bool]) =>
-
-    let unit = try polymer as Unit else return end
-
-    tries = tries + 1
-    if tries > 200 then
-      env.err.print("Error, too many attempts!")
-      return
+  be _finish(len: U32) =>
+    """
+      cancel querying for report.
+    """
+    Debug("Partial result for " + _letter + ", length: " + len.string())
+    _length_promise(len) // report back to Part2Runner
+    _done_cb(None)
+    try
+      timers.cancel(timer_tag as Timer tag)
+    else
+      Debug("Cannot _finish! Endless loop now.")
     end
 
-    let p = Promise[String]
-    p.next[None](
-      {(str : String val) => 
-        cb(true)
-        _done_cb(None)
-        length_promise(str.size().u32())
-        env.out.print("Partial result for " + letter + ", length: " + str.size().string())
-      },
-      {() => 
-        // Debug("Part2 rejected. Try again?")
-        cb(false) // notify Watcher to try again
-      }
-    )
+  // be _finish_and_report2(letter: String, length_promise: Promise[U32], cb : Promise[Bool]) =>
 
-    let result_token = recover iso Result(p) end
-    unit.report(consume result_token)
+  //   let unit = try polymer as Unit else return end
+
+  //   tries = tries + 1
+  //   if tries > 200 then
+  //     env.err.print("Error, too many attempts!")
+  //     return
+  //   end
+
+  //   let p = Promise[String]
+  //   p.next[None](
+  //     {(str : String val) => 
+  //       cb(true)
+  //       _done_cb(None)
+  //       length_promise(str.size().u32())
+  //       env.out.print("Partial result for " + letter + ", length: " + str.size().string())
+  //     },
+  //     {() => 
+  //       // Debug("Part2 rejected. Try again?")
+  //       cb(false) // notify Watcher to try again
+  //     }
+  //   )
+
+  //   let result_token = recover iso Result(p) end
+  //   unit.report(consume result_token)
 
   fun _final() =>
-    @puts("GCing LetterFilter".cstring())
+    @puts("GCing LetterFilter".cstring()) 
 
 // run a few, ie. 1 job, but not all. Queue the rest
 actor Part2Runner
@@ -581,12 +628,17 @@ actor Part2Runner
         (ary : Array[U32] val) =>
           let min = Iter[U32](ary.values()).fold[U32](100000, {(count, mem) => if count < mem then count else mem end })
           _env.out.print("Part 2: " + min.string() )
+          Debug("THE END. Let RT recover, sleep for 5 seconds.")
+          @sleep(5)
       })
     else
       // schedule another one
       let str = try _queue.pop()? else return end
       let p = Promise[U32]
       _jobs.push(p)
+      Noop("new_job", _env).ssize() // just testing GC.
+      // Debug("Let RT recover, sleep for 15 seconds.")
+      // @sleep(15)
       Debug("starting to process filtered run with: " + str)
       LetterFilter(_env, str, p, job)
     end

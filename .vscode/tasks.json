@@ -5,7 +5,9 @@
   "tasks": [
     {
         "label": "build",
-        "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main '",
+        "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main'",
+        // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main | tee log.log 2>&1'",
+        // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main --ponygcinitial 1 --ponygcfactor 1 '",
         "type": "shell",
         "presentation": {
             "echo": true,
