@@ -43,9 +43,12 @@ Thanks https://adventofcode.com/ !
 
 ## Day 5
 
+** Day5_mini - simplified, extracted code happened to be Pony GC stress test **
+
 Fun first! Too complex approach to do a linked-list of actors and try to coordinate reactions.
 
-Highly parallel - with peak of a few thousands concurrent reactions!
+* Highly parallel - with peak of a few thousands concurrent reactions!
+  * May get sequential near the end when one reaction triggers just one following one.
 
 ~~Some kind of transaction must be figured out, such as a token, and reactions need to wait until token is received~~. First attempt with FSM.
 
@@ -60,6 +63,12 @@ Some kind of notifications must me sent to siblings when transaction is done. Ea
 A state of whole reaction/no reaction is needed to determine when reactions are done. Implemented with ReactionWatcher. When number of active reactions drops to 0 it calls a lambda that checks if polymer is stable. If polymer is not stable - check is repeated again, when number of reactions drops to 0 again. Usually a few attempts are needed until polymer is stable. It's because message passing takes time and not all reactions are active at once. Similarly, reporting by traversing node-by-node also takes time.
 
 I find this solution more elegant that firing Timer with check(), check(), check()... especially because it's hard to tell how long such reporting would take and having more than one pass at any given time is suboptimal.
+
+Update after part2: This reporting is not good, because pessimistic scenario for letter 'sS' takes too long, and firing Report over and over, after each reaction - it's not optimal.
+
+It another conditions to fire Reporting were found - Timer would not have been necessary.
+
+I switched to Timers approach, it's not that reactive, async, fancy, low-latency etc., but it gets job done. And it's simpler to read.
 
 ### State machine conclusions
 
@@ -89,3 +98,7 @@ I find this solution more elegant that firing Timer with check(), check(), check
 * keep Main as simple as possible
 * SortBy, Min, Max primitives are definitely needed.
 * Actor waiting for actor waiting for actor (...) is just too much to pass promises to the very bottom. Use regular classes or find another way to go (Part2Runner)
+  * performance issue may be related to how GC works.
+  * notifier/listener pattern should still work.
+  * use Timer to check periodically if something's done if it has highly async nature
+* Memory consumption should be more debuggable, to help GC do it's job
