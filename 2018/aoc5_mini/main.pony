@@ -1,9 +1,21 @@
 use "itertools"
 use "collections"
 use "promises"
+use "time"
 
 use @puts[I32](str: Pointer[U8] tag)
-use @sleep[U32](seconds: U32)
+// use @sleep[U32](seconds: U32) // sleep should not be used since it may cause RT to sleep
+
+// thanks to SeanTAllen: https://playground.ponylang.io/?gist=ddac0ecd24629d6f280244da8304fb12
+// thanks to EpicEric: https://gist.github.com/EpicEric/255ef60d8fa873b77bc271b90aaa81fb
+
+/*
+<SeanTAllen> an actor is eligible to be gc'd when:
+<SeanTAllen> 1- it isn't referenced by anything
+<SeanTAllen> 2- it can't receive any messages
+<SeanTAllen> #2 is mostly covered by #1
+<SeanTAllen> but also includes that actor not being registered with the async io system
+*/
 
 // mini case
 // spawn actors that accept a optional Promise. actors can be notified to negotiate minimum. only local minimums compare further
@@ -12,9 +24,9 @@ use @sleep[U32](seconds: U32)
 
 // CONFIG:
 primitive Coords
-  fun apply() : U32 => 100000 // with 3GB of ram 200000x10 is enough the get killed by OOM
+  fun apply() : U32 => 10 // with 3GB of ram 200000x10 is enough the get killed by OOM
 primitive Noops
-  fun apply() : U32 => 1
+  fun apply() : U32 => 2
 
 actor Noop
   """
@@ -52,7 +64,7 @@ actor Coordinator
   let _id : U32 // for display purposes
   var _done : U32 = 0 // counter of completed sub-actors
   
-  new create(env: Env, id : U32, cb : (Promise[Bool] | None) = None) =>
+  new create(env: Env, id : U32, cb : (Promise[Bool] | None)) =>
     _env = env
     _id = id
     _cb = cb
@@ -96,8 +108,6 @@ actor Main
     _jobs = Array[Promise[Bool]](_cnt.usize())  // this is the reason no Coordinator can ever be GCed?
     env.out.print("Hello, let's spawn lots of actors(" + _cnt.string() + ") with many Noops(" + Noops().string() + ")")
     env.out.print("That's " + Coords().string() + " cycles, each with " + (Noops() + 2).string() + " actors.")
-
-    if true then // with promises      
       for i in Range[U32](0,_cnt) do
         let p = Promise[Bool]
         _jobs.push(p)
@@ -113,22 +123,23 @@ actor Main
           env.out.print("Fake work is done: " + jobs.size().string() + " jobs. Nothing at all should stop GC from working.")
       })
 
-    else
-      for i in Range[U32](0,_cnt) do
-        Coordinator(env, i)  // no reference hold explicitly, no promise
-        None  // explicit none as returned value
-      end
-      // now wait 10 sec for any GC...
-    end
-
-    _done() // let scheduler work
+    // Fake delay to let GC work and find cycles.
+    // At some point all_done is fulfilled, maybe then GC can work?
+    let timers = Timers
+    let timer = Timer(Notify(this), 30_000_000_000)
+    timers(consume timer)
+    env.out.print("Main is sleeping for 10 secs. Should see some GC now?")
 
   be _done() =>
-    """ 
-      Fake delay to let GC work and find cycles. 
-      At some point all_done is fulfilled, maybe then GC can work?
-    """
-    env.out.print("Main is sleeping for 10 secs. Should see some GC now?")
-    @sleep(10)
     env.out.print("^------ Sleep is over. Was there any GC before? Next ones are caused by mass GCing before exit.")
     // Messages there indicate mass GCing before exit.
+
+class Notify is TimerNotify
+  let _main: Main
+
+  new iso create(main: Main) =>
+    _main = main
+
+  fun ref apply(timer: Timer, count: U64): Bool =>
+    _main._done()  // let scheduler work
+    false
