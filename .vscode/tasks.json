@@ -4,61 +4,65 @@
   "version": "2.0.0",
   "tasks": [
     {
-        "label": "build",
-        "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main'",
-        // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main | tee log.log 2>&1'",
-        // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main --ponygcinitial 1 --ponygcfactor 1 '",
-        "type": "shell",
-        "presentation": {
-            "echo": true,
-            "reveal": "always",
-            "focus": false,
-            "panel": "shared"
-        },
-        "group": {
-            "kind": "build",
-            "isDefault": true //ctrl+shift+b
-        },
-        "problemMatcher": {
-            "owner": "pony",
-            "fileLocation": [
-                "relative",
-                "${workspaceFolder}"
-            ],
-            "pattern": [
-                {
-                    "regexp": "^(.+):$",
-                    "severity": 1
-                },
-                {
-                    "regexp": "^\\/src\\/main\\/([^:]+):(\\d+):(\\d+):\\s+(.*)$",
-                    "file": 1,
-                    "line": 2,
-                    "column": 3,
-                    "code": 4
-                },
-                {
-                    "regexp": "^(\\s.+)$",
-                    "message": 1,
-                    "loop": true
-                }
-            ]
-        }
+      "label": "build",
+      "command": "cmd /c 'cd ${fileDirname} && ponyc -V 1 -d -b main && main.exe'",
+      // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main'",
+      // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main | tee log.log 2>&1'",
+      // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main --ponygcinitial 1 --ponygcfactor 1 '",
+      // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && ponyc -V 1 -d -b main && ./main --ponygcinitial=1 --ponynoblock'",
+      // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) && stable --help'",
+      "type": "shell",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "dedicated"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true //ctrl+shift+b
+      },
+      "problemMatcher": {
+        "owner": "pony",
+        "fileLocation": [
+          "absolute"
+        ],
+        "pattern": [
+          {
+            "regexp": "^([^\\s].+):$",
+            "severity": 1
+          },
+          {
+            // "regexp": "^[^\\s].+?\\\\([^\\\\]+\\.pony):(\\d+):(\\d+):\\s+(.*)$",
+            "regexp": "^([^\\s].+\\.pony):(\\d+):(\\d+):\\s+(.*)$",
+            "file": 1,
+            "line": 2,
+            "column": 3,
+            "message": 4
+          },
+          {
+            "regexp": "^(\\s.+)$",
+            "code": 1,
+            "loop": true
+          }
+        ]
+      }
     },
     {
-        "label": "run",
-        "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) &&  ./main'",
-        "type": "shell",
-        "presentation": {
-            "echo": true,
-            "reveal": "always",
-            "focus": true,
-            "panel": "shared"
-        },
-        "group": {
-            "kind": "test",
-            "isDefault": true // map as ctrl+alt+b
-        }
+      "label": "run",
+      // "command": "docker run --rm -v ${workspaceFolder}:/src/main ponylang/ponyc bash -c 'cd $(dirname ${relativeFile}) &&  ./main'",
+      "command": "cmd /c 'cd ${fileDirname}/test && ponyc -V 1 -d -b main && main.exe'",
+      "type": "shell",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": true,
+        "panel": "shared"
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true // map as ctrl+alt+b
+      }
     }
-]
+  ]
 }

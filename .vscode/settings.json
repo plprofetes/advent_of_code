@@ -27,5 +27,13 @@
     "typescript",
     "typescriptreact",
     "yml"
+  ],
+  "cSpell.words": [
+    "Hashable",
+    "Stringable",
+    "concat",
+    "itertools",
+    "ponytest",
+    "usize"
   ]
 }
