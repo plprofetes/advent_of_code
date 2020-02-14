@@ -85,3 +85,23 @@ actor Main
     else
       Debug("could not solve that.")
     end
+
+    let img : Array[String] trn = recover trn Array[String].init("!", size) end
+    for x in Range[USize](0,  size) do
+      var computed_pixel = "!"
+      try 
+        for l in layers.values() do
+          let px = l(x)?
+          // if px == 2 then continue end
+          if px == 0 then computed_pixel = " "; break end
+          if px == 1 then computed_pixel = "#"; break end
+        end
+        img.update(x,computed_pixel)?
+      end
+    end
+    let img2 : Array[String] val = consume img
+    env.out.print("Part2:")
+    for i in Range[USize](0, height.usize()) do
+      env.out.print("".join( img2.trim(i * width.usize(), (i+1)*width.usize()).values() ))
+    end
+
