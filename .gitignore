@@ -57,3 +57,8 @@ main
 *.ilk
 *.lib
 *.pdb
+
+# c stuff
+a.out
+*.swp
+solution

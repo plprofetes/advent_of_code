@@ -4,6 +4,9 @@ Not the prettiest, but solves the quiz.
 
 Thanks https://adventofcode.com/ !
 
+2017 - Ruby - just checking AoC
+2018-2019 - Ponylang (because it's just cool)
+2020 - C (because it's been 10 years since I last used it)
 
 # Items of note about Pony
 
@@ -27,12 +30,11 @@ Thanks https://adventofcode.com/ !
 * debugger, any, really
 * can constructor call another constructor?
 
-## Day 2
+## 2018 Day 2
 
 * map and reduce pattern: https://playground.ponylang.io/?gist=a987e67f6ae804cc256a47736704f459 when there's only one successful Promise
 
-
-## Day 4
+## 2018 Day 4
 
 * Missing proper Time and Date classes in Stdlib
 * Missing SortBy accepting a lambda that transforms elements of array to something Comparable
@@ -41,7 +43,7 @@ Thanks https://adventofcode.com/ !
 * Missing Seq.min, Seq.max methods, one has to type ```Iter[]...fold[]()``` code over and over
   * with additional param as value being compared, when different from whole basic type?
 
-## Day 5
+## 2018 Day 5
 
 ** Day5_mini - simplified, extracted code happened to be Pony GC stress test **
 
@@ -102,3 +104,4 @@ I switched to Timers approach, it's not that reactive, async, fancy, low-latency
   * notifier/listener pattern should still work.
   * use Timer to check periodically if something's done if it has highly async nature
 * Memory consumption should be more debuggable, to help GC do it's job
+
