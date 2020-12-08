@@ -1,4 +1,2 @@
-CFLAGS = -Wall -g -std=c11 -Wpedantic
-
-all: *.c
-	$(CC) $(CFLAGS) -O2 *.c -o solution
+all: d01.c
+	$(CC) $(CFLAGS) -std=c11 -Wpedantic -O2 d01.c -o solution

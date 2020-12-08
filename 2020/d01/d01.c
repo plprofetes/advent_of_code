@@ -2,137 +2,94 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-typedef enum stage
-{
-  LO,
-  HI,
-  LTR,
-  PASS
-} stage_t;
-
-typedef struct
-{
-  uint_least8_t lo;
-  uint_least8_t hi;
-  char letter;
-} rule_t;
-
-static int LINE_LENGTH = 50;
-
-void clear_line(char *line)
-{
-  for (int i = 0; i < LINE_LENGTH; ++i)
-    line[i] = 0;
-}
-
-int valid_pass(rule_t *r, char *line, int length)
-{
-  // printf("checking if %c exists from %d to %d times in %p\n", r->letter, r->lo, r->hi, &line);
-  int count = 0;
-  for (int i = 0; i < length; ++i)
-  {
-    if (line[i] == r->letter)
-      ++count;
-  }
-  return count >= r->lo && count <= r->hi;
-}
-
-int valid_pass2(rule_t *r, char *line, int length)
-{
-  // lo +1 is the first index, hi + 1 is the second index.
-  // printf("checking if %c=%c xor %c=%c\n", r->letter, line[r->lo - 1], r->letter, line[r->hi - 1]);
-  return (r->letter == line[r->lo - 1]) ^ (r->letter == line[r->hi - 1]);
-}
+typedef uint_least32_t u32;
 
 int main(int argc, char **argv)
 {
-  printf("hello day2!\n");
+  printf("hello!\n");
 
   FILE *fp = fopen("in.txt", "r");
   if (fp == 0)
   {
-    printf("Cannot open file in.txt\n");
+    printf("Cannot open file in.txti\n");
     exit(1);
   }
-
-  char line[LINE_LENGTH];
-  int pos = 0;
+  u32 input[200];
+  int lines = 0;
+  char line[5] = {0, 0, 0, 0, 0};
+  int digit = 0;
   int c;
-
-  rule_t curr = {.hi = 0, .lo = 0};
-  stage_t step = LO;
-  int correct = 0;
-  int correct2 = 0;
 
   while (1)
   {
     c = getc(fp);
     // printf("%d\n", c);
-    if (c == '\n' || c == EOF)
+    if (c == '\r')
     {
-      // verify password
-      if (valid_pass(&curr, line, pos))
-        correct += 1;
-      if (valid_pass2(&curr, line, pos))
-        correct2 += 1;
-
-      if (c == EOF)
-        break;
-
-      // reset stuff
-      step = LO;
-      pos = 0;
-    }
-    else if (c == '\r')
-    {
-      // ignore
       continue;
     }
-
-    line[pos++] = c;
-    switch (step)
+    if (c == '\n' || c == EOF)
     {
-    case LO:
-      if (c == '-')
+      // next
+      input[lines++] = atoi(line);
+      for (int j = 0; j < digit; j++)
       {
-        //we're done
-        curr.lo = atoi(line);
-        step = HI;
-        clear_line(line);
-        pos = 0;
+        line[j] = 0;
       }
-      break;
-    case HI:
-      if (c == ' ')
-      {
-        curr.hi = atoi(line);
-        step = LTR;
-        clear_line(line);
-        pos = 0;
-      }
-      break;
-    case LTR:
-      if (c == ':')
-      {
-        curr.letter = line[0];
-        step = PASS;
-        clear_line(line);
-        pos = 0;
-      }
-      break;
-    case PASS:
-      if (c == ' ')
-      {
-        pos = 0; // rewrite this
-      }          // sooner or later we'll get into \n or EOF. Check pass there.
-      break;
-    default:
-      break;
+      digit = 0;
+      if (c == EOF)
+        break;
     }
+    line[digit++] = c;
   }
   fclose(fp);
 
-  printf("Part1: %d\n", correct);
-  printf("Part2: %d\n", correct2);
+  printf("File loaded with %d lines\n", lines);
+  // for (int i = 0; i < lines; ++i)
+  // {
+  //   printf("%0d: %d\n", i, input[i]);
+  // }
+
+  int found = 0;
+  for (int outer = 0; outer < lines; ++outer)
+  {
+    for (int inner = 0; inner < lines; ++inner)
+    {
+      if (inner == outer)
+        continue;
+      if (input[inner] + input[outer] == 2020)
+      {
+        printf("Part1: %d*%d=%d\n", input[outer], input[inner], input[outer] * input[inner]);
+        found = 1;
+        break;
+      }
+    }
+    if (found)
+      break;
+  }
+
+  found = 0;
+  for (int external = 0; external < lines; ++external)
+  {
+    for (int outer = 0; outer < lines; ++outer)
+    {
+      for (int inner = 0; inner < lines; ++inner)
+      {
+        if (inner == outer || inner == external || outer == external)
+          continue;
+        if (input[external] + input[inner] + input[outer] == 2020)
+        {
+          printf("Part2: %d*%d*%d=%d\n", input[external], input[outer], input[inner], input[external] * input[outer] * input[inner]);
+          found = 1;
+          break;
+        }
+      }
+      if (found)
+        break;
+    }
+    if (found)
+      break;
+  }
+
   return 0;
 }
