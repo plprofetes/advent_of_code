@@ -5,7 +5,9 @@ Not the prettiest, but solves the quiz.
 Thanks https://adventofcode.com/ !
 
 2017 - Ruby - just checking AoC
+
 2018-2019 - Ponylang (because it's just cool)
+
 2020 - C (because it's been 10 years since I last used it)
 
 # Items of note about Pony
