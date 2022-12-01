@@ -6,9 +6,13 @@ Thanks https://adventofcode.com/ !
 
 2017 - Ruby - just checking AoC
 
-2018-2019 - Ponylang (because it's just cool)
+2018-2019 - Pony (because it's just cool)
 
 2020 - C (because it's been 10 years since I last used it)
+
+2021 - missed!
+
+2022 - Odin
 
 # Items of note about Pony
 
@@ -78,7 +82,7 @@ I switched to Timers approach, it's not that reactive, async, fancy, low-latency
 
 * ~~change state first, then message~~
 * messages sent from try..end blocks cannot be unsent, even if block fails
-* fun/be is single-threaded, ~~but still can by cut off the CPU in the middle of executing!~~, not preemptive (https://tutorial.ponylang.io/gotchas/scheduling.html) 
+* fun/be is single-threaded, ~~but still can by cut off the CPU in the middle of executing!~~, not preemptive (https://tutorial.ponylang.io/gotchas/scheduling.html)
 * messages can be deduped if reaction to them is in another behavior: flag can be set multiple times, but cleared once, the rest of reaction code is NOOP
 * in agent's inbox there's a lot of historical messages, some of them may need to be redirected, some removed. Always check current state and process messages accordingly.
 * make sure all connections are established correctly, actors can be launched in any order, causality might not be enough, since independent actors may scheduled at different order/time and still remain causal.
