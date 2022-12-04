@@ -62,3 +62,7 @@ main
 a.out
 *.swp
 solution
+
+# odin stuff
+ols.json
+*.bin
