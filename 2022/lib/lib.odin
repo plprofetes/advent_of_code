@@ -16,7 +16,7 @@ read_lines :: proc(filename: string = "input.txt") -> []string {
 	str := string(data)
 	ret := strings.split(str, "\n")
 	// delete(data)
-	return ret
+	return ret[0:len(ret)-1]
 }
 
 @(test)
