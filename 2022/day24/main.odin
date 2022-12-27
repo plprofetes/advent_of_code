@@ -12,7 +12,6 @@ import "../lib"
 // approach: represent world safe places in hash with v3: {x,y,z}, where z is gen number.
 // Generate data lazily, store newest generation only.
 // A* with possible wait (cost just increases)
-// when it's impossible to escape the blizzard - add infinite const to the node
 
 v2 :: [2]int
 v3 :: [3]int
@@ -94,89 +93,64 @@ world_init :: proc(w: ^world, input: []string) {
 	}
 }
 
-// world_print :: proc(w: ^world, gen: int) {
-// 	for y := 0; y < w.h; y += 1 {
-// 		for x := 0; x < w.w; x += 1 {
-// 			if x == 0 || x == w.w - 1 {fmt.print("#");continue}
-// 			if y == 0 || y == w.h - 1 {fmt.print("#");continue}
-
-// 			p := v3{x, w.h - y - 1, gen}
-// 			if p not_in w.safe {
-// 				fmt.print(".")
-// 			} else {
-// 				fmt.print(" ") // we dont know the direction
-// 			}
-// 		}
-// 		fmt.print("\n")
-// 	}
-// }
-
-world_gen :: proc(w: ^world, gen: int) {
-	// generate up to gen round of world
-	// return if already generated
-	if gen <= w.gen do return
-
+world_gen :: proc(w: ^world) {
+	// generate a round of the world
 	// fmt.println(w)
 
-	for g in w.gen ..= gen {
-		// fmt.println("GEN ", g)
+	m := lib.make_2d_slice(w.w, w.h, rune)
+	defer lib.delete_2d_slice(m)
 
-		// tiresome rewriting of a map. It's easier than storing original points with directions?
-		// m := cast(^[]rune)mem.alloc(size_of(rune)*w.h*w.w)
-		// defer free(m)
-		m := lib.make_2d_slice(w.w, w.h, rune)
-		defer lib.delete_2d_slice(m)
+	for k, v in w.state {
+		// get initial pos, add generations, modulo, corrections...
+		unit := dir2vec(v)
+		unit *= w.gen
+		// fmt.println(unit)
+		unit += k
+		if v == Dir.L || v == Dir.R {
+			unit.x = ((unit.x - 1) % (w.w - 2)) + 1
+			if unit.x <= 0 do unit.x += w.w - 2
+		} else {
+			unit.y = ((unit.y - 1) % (w.h - 2)) + 1 // y=1
+			if unit.y <= 0 do unit.y += w.h - 2
+		}
+		// fmt.println(k, g, "*", v, "->", unit)
+		assert(unit.x != 0)
+		assert(unit.x != w.w - 1)
+		assert(unit.y != 0)
+		assert(unit.y != w.h - 1)
+		m[unit.x][unit.y] = dir2s(v)
+		// for each point - check if it's safe
+	}
 
-		for k, v in w.state {
-			// get initial pos, add generations, modulo, corrections...
-			unit := dir2vec(v)
-			unit *= g
-			// fmt.println(unit)
-			unit += k
-			if v == Dir.L || v == Dir.R {
-				unit.x = ((unit.x - 1) % (w.w - 2)) + 1
-				if unit.x <= 0 do unit.x += w.w - 2
+	for y := 0; y < w.h; y += 1 {
+		for x := 0; x < w.w; x += 1 {
+			if (x == 0 || x == w.w - 1) && DEBUG {fmt.print("#");continue}
+			if (y == 0 || y == w.h - 1) && DEBUG {fmt.print("#");continue}
+			val := m[x][w.h - y - 1]
+			if val != 0 {
+				if DEBUG do fmt.print(val)
 			} else {
-				unit.y = ((unit.y - 1) % (w.h - 2)) + 1 // y=1
-				if unit.y <= 0 do unit.y += w.h - 2
-			}
-			// fmt.println(k, g, "*", v, "->", unit)
-			assert(unit.x != 0)
-			assert(unit.x != w.w - 1)
-			assert(unit.y != 0)
-			assert(unit.y != w.h - 1)
-			m[unit.x][unit.y] = dir2s(v)
-			// for each point - check if it's safe
-		}
-
-		for y := 0; y < w.h; y += 1 {
-			for x := 0; x < w.w; x += 1 {
-				if (x == 0 || x == w.w - 1) && DEBUG {fmt.print("#");continue}
-				if (y == 0 || y == w.h - 1) && DEBUG {fmt.print("#");continue}
-				val := m[x][w.h - y - 1]
-				if val != 0 {
-					if DEBUG do fmt.print(val)
-				} else {
-					if DEBUG do fmt.print(" ")
-					p := v3{x, w.h - y - 1, g}
-					w.safe[p] = 1
-				}
-			}
-			if DEBUG do fmt.print("\n")
-		}
-
-		for s in w.safe {
-			if s.z == g {
-				if DEBUG do fmt.println("safe:", s)
+				if DEBUG do fmt.print(" ")
+				p := v3{x, w.h - y - 1, w.gen}
+				w.safe[p] = 1 // the only thing that needs to have generations available.
 			}
 		}
-
 		if DEBUG do fmt.print("\n")
 	}
-	w.gen = gen
-	// fmt.println(w)
+
+	if DEBUG {
+		for s in w.safe {
+			if s.z == w.gen {
+				fmt.println("safe:", s)
+			}
+		}
+		fmt.print("\n")
+	}
+
+	w.gen += 1 //get ready for next one. Not nice at all.
 }
 
+// for prioritizing node picking
 dist :: proc(x: v2, y: v2) -> f32 {
 	d := (x.x - y.x) * (x.x - y.x) + (y.y - x.y) * (y.y - x.y)
 	return math.sqrt((f32)(d))
@@ -185,8 +159,8 @@ dist :: proc(x: v2, y: v2) -> f32 {
 // basic bounds check for step in gen+1, without start and end.
 // @param: gen: current generation
 check_spot :: proc(w: ^world, c: v2, gen: int) -> (ok: bool) {
-	// without side walls
-	ok = c.x > 0 && c.y > 0 && c.x < w.w-1 && c.y < w.h-1
+	// without side walls, start, end
+	ok = c.x > 0 && c.y > 0 && c.x < w.w - 1 && c.y < w.h - 1
 	if ok {
 		p := v3{c.x, c.y, gen + 1} // will it be safe there next turn
 		ok = p in w.safe // cheaper to add walls to exclude list?
@@ -195,6 +169,7 @@ check_spot :: proc(w: ^world, c: v2, gen: int) -> (ok: bool) {
 	return
 }
 
+// next node to evaluate
 get_next :: proc(open: ^[dynamic]node, end: v2) -> node {
 	c: node = open[0]
 	ndx: int = 0
@@ -205,7 +180,7 @@ get_next :: proc(open: ^[dynamic]node, end: v2) -> node {
 			ndx = i
 		}
 	}
-	// swap and pop, can be hidden behind proc
+	// swap and pop. Could be rewritten to pop_end for efficiency
 	tmp := open[0]
 	open[0] = open[ndx]
 	open[ndx] = tmp
@@ -224,41 +199,42 @@ node :: struct {
 }
 
 // A* algorithm with temporal features and wait operation.
-// too complex, not finished.
-search :: proc(start: v2, end: v2, w: ^world) -> int {
+search :: proc(start: v2, end: v2, w: ^world, init_cost: int = 0) -> int {
 
-	// heuristics are computed online and applied each time. Node only tracks steps so far
+	// distance/cost heuristics are computed online and applied each time. Node only tracks steps so far
 	// all we care is the cheapest cost to reach each tile
 
 	// track points in dynamic arrays
 	// insert processed node into a map, insert queues for candidates.
-	open := make([dynamic]node)
-	// TODO: rejected list? can be hidden behing cost = 1_000_000_000
-	start_node: node = {start, start, 0}
+	open := make([dynamic]node)	// temporal aspect hidden in cost.
+	start_node: node = {start, start, init_cost}
+	// fmt.println(start_node, end)
 	append(&open, start_node)
-	tree := make(map[v3]node) // cost of getting to point v2 in gen z. Visited nodes
+	tree := make(map[v3]node) // cost of getting to point v2 in gen z. Aka visited nodes
 
-	end_node : node
+	end_node: node
 
-	search: for gen in 0 ..= 100000000 { 	// it's more or less steps, because gen is written per node.
-		// when to sweep nodes that were destroyed by blizzard?
-		// can the same points occupy different nodes from different time periods?
+	search: for gen in 0 ..= 100000000 { 	// it's more or less steps, because gen is written per node. Limit for safety.
+		// dont sweep nodes that were destroyed by blizzard, just dont insert them.
+		// can the same points occupy different nodes from different time periods? Yes, so tree must be v3, with generation info.
 
 		assert(len(open) > 0)
 		// fmt.println("open queue before:", open)
 
-
-		// get node closest to the target. It should be a priority list sorted by that value...
+		// get node closest to the target. It should be a priority list sorted by that value, if we needed efficiency
 		c := get_next(&open, end)
 		// fmt.println("picked: ", c)
 		ver := v3{c.point.x, c.point.y, c.cost + 1}
-		if ver in tree {continue} // no, because we can wait
+		if ver in tree {continue} 	// v2 would not suffice, v3 is perfect.
 
-		world_gen(w, c.cost + 2) // simulate safety space for next turn
+		for {
+			if w.gen > c.cost + 1 {break} 	// w.gen is incremented before that gen is generated. not nice.
+			world_gen(w) // simulate safety space for next turn, lazily
+		}
 
-		// insert into the tree
+		// insert into the tree - this node is visited, it was the cheapest and closest to target so far.
 		tree[ver] = node({c.point, c.parent, c.cost})
-		// remove from all queues, already done in the beginning.
+		// ver will not be analyzed anymore
 
 		// analyze possible next steps
 		// left, right, up, down if no blizzard there
@@ -271,23 +247,16 @@ search :: proc(start: v2, end: v2, w: ^world) -> int {
 		append(&cs, v2({c.point.x, c.point.y + 1}))
 		append(&cs, v2({c.point.x, c.point.y - 1}))
 
-		// TODO: check current spot, it may not be legal next turn
-		// TODO: in general: invalidate open queue if blizzard enters given field
-		// TODO: how to compare the same spot in different generations?
-		// TODO: open should be 3d? with temporal aspect? does dedupping happens?
-		//	no, no dedupping, we're only interested in cheapest node per tile
-
-		// node should track it's history independently. Node is actually a pointer to a tile with history (cost)
-
 		for n in cs {
 			if n == end {
 				fmt.println("Target reached")
-				end_node = node{n, c.point, c.cost+1}
+				end_node = node{n, c.point, c.cost + 1}
 				break search
 			}
-			if n == start || check_spot(w, n, c.cost) {
+			if n == start || check_spot(w, n, c.cost) { // sometimes one has to hide again on start tile
 				// fmt.println("Analyzing candidate ", n)
-				// if n in tree {continue}
+				ver := v3{n.x, n.y, c.cost + 1}
+				if ver in tree {continue}
 				found := false
 				for q, i in open {
 					if n != q.point || c.cost + 1 != q.cost {continue}
@@ -296,21 +265,21 @@ search :: proc(start: v2, end: v2, w: ^world) -> int {
 					// cost so far + approx cost to the end
 					if c.cost < q.cost {
 						// fmt.println("Found cheaper path to", n, "in gen", c.cost + 1)
-						// update queue
+						// it was cheaper to get there. Update the item in queue
 						open[i].cost = c.cost + 1
 						open[i].parent = c.point
 					}
 					break
 				}
 				if !found {
-					// insert
+					// insert new item in open list.
 					// fmt.println("Append to open:", n, "cost:", c.cost+1)
 					append(&open, node({n, c.point, c.cost + 1}))
 				}
 			} else {
 				// fmt.println("Candidate ", n, "not safe in gen", c.cost+1)
 			}
-			if c.point == start || check_spot(w, c.point, c.cost) { // maybe?
+			if c.point == start || check_spot(w, c.point, c.cost) { 	// maybe we can wait here?
 				// still safe, let's wait, add cost
 				// fmt.println("we can wait at", c)
 				append(&open, node{c.point, c.point, c.cost + 1})
@@ -318,7 +287,6 @@ search :: proc(start: v2, end: v2, w: ^world) -> int {
 				// fmt.println("we cannot wait at", c)
 			}
 		}
-
 		// fmt.println("Processed", c.point)
 	}
 	// fmt.println(tree)
@@ -336,7 +304,7 @@ part1 :: proc(lines: []string) {
 	for x, i in lines[0] {
 		if x == '.' {
 			start.x = i
-			start.y = len(lines)-1
+			start.y = len(lines) - 1
 			break
 		}
 	}
@@ -355,9 +323,9 @@ part1 :: proc(lines: []string) {
 	cost1 := search(start, end, &w)
 	fmt.println("part1:", cost1)
 
-	// cost2 := search(end, start, &w)
-	// cost3 := search(start, end, &w)
-	// fmt.println("part2:", cost1+cost2+cost3)
+	cost2 := search(end, start, &w, cost1)
+	cost3 := search(start, end, &w, cost2)
+	fmt.println("part2:", cost3)
 }
 
 part2 :: proc(lines: []string) {
