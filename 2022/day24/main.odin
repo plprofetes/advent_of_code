@@ -173,11 +173,13 @@ check_spot :: proc(w: ^world, c: v2, gen: int) -> (ok: bool) {
 get_next :: proc(open: ^[dynamic]node, end: v2) -> node {
 	c: node = open[0]
 	ndx: int = 0
+	cost: f32 = f32(c.cost) + dist(c.point, end)
 	for n, i in open {
-		if f32(n.cost) + dist(n.point, end) < f32(c.cost) + dist(n.point, end) {
+		if f32(n.cost) + dist(n.point, end) < cost {
 			// heuristics to promote nodes closer to the end
 			c = n
 			ndx = i
+			cost = f32(n.cost) + dist(n.point, end)
 		}
 	}
 	// swap and pop. Could be rewritten to pop_end for efficiency
@@ -206,7 +208,7 @@ search :: proc(start: v2, end: v2, w: ^world, init_cost: int = 0) -> int {
 
 	// track points in dynamic arrays
 	// insert processed node into a map, insert queues for candidates.
-	open := make([dynamic]node)	// temporal aspect hidden in cost.
+	open := make([dynamic]node) // temporal aspect hidden in cost.
 	start_node: node = {start, start, init_cost}
 	// fmt.println(start_node, end)
 	append(&open, start_node)
@@ -253,7 +255,7 @@ search :: proc(start: v2, end: v2, w: ^world, init_cost: int = 0) -> int {
 				end_node = node{n, c.point, c.cost + 1}
 				break search
 			}
-			if n == start || check_spot(w, n, c.cost) { // sometimes one has to hide again on start tile
+			if n == start || check_spot(w, n, c.cost) { 	// sometimes one has to hide again on start tile
 				// fmt.println("Analyzing candidate ", n)
 				ver := v3{n.x, n.y, c.cost + 1}
 				if ver in tree {continue}
